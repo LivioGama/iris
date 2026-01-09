@@ -22,13 +22,27 @@ struct IRISApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        requestPermissions()
+        Task {
+            await requestAllPermissions()
+        }
     }
     
-    private func requestPermissions() {
-        AVCaptureDevice.requestAccess(for: .video) { _ in }
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        SFSpeechRecognizer.requestAuthorization { _ in }
+    private func requestAllPermissions() async {
+        let cameraGranted = await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+        print("Camera permission: \(cameraGranted)")
+        
+        let micGranted = await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+        print("Microphone permission: \(micGranted)")
+        
+        print("Skipping speech recognition authorization (requires app bundle)")
     }
 }
 
