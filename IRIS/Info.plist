@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>IRIS</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.iris.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>I.R.I.S</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSCameraUsageDescription</key>
+    <string>I.R.I.S uses the camera to track your approximate eye focus for intent-based interaction.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>I.R.I.S uses the microphone to capture your voice commands.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>I.R.I.S uses speech recognition to transcribe your voice commands.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>I.R.I.S captures screen content to provide context for intent resolution.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+</dict>
+</plist>
