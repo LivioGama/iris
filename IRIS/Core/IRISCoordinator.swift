@@ -16,6 +16,9 @@ class IRISCoordinator: ObservableObject {
     @Published var lastIntent: ResolvedIntent?
     @Published var debugLog: [String] = []
     
+    @Published var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
+    @Published var gazeDebugInfo: String = ""
+    
     private var cancellables = Set<AnyCancellable>()
     
     init() {
@@ -23,13 +26,18 @@ class IRISCoordinator: ObservableObject {
     }
     
     private func setupBindings() {
-        cameraService.onFrame = { [weak self] pixelBuffer in
-            self?.gazeEstimator.processFrame(pixelBuffer)
-        }
-        
         gazeEstimator.$gazePoint
+            .receive(on: RunLoop.main)
             .sink { [weak self] point in
+                self?.gazePoint = point
                 self?.intentTrigger.updateGaze(point)
+            }
+            .store(in: &cancellables)
+        
+        gazeEstimator.$debugInfo
+            .receive(on: RunLoop.main)
+            .sink { [weak self] info in
+                self?.gazeDebugInfo = info
             }
             .store(in: &cancellables)
         
@@ -67,17 +75,17 @@ class IRISCoordinator: ObservableObject {
     
     func start() async {
         do {
-            try await cameraService.start()
             try await audioService.start()
+            gazeEstimator.start()
             isActive = true
-            log("I.R.I.S activated")
+            log("I.R.I.S activated - EyeGestures Python")
         } catch {
             log("Failed to start: \(error)")
         }
     }
     
     func stop() {
-        cameraService.stop()
+        gazeEstimator.stop()
         audioService.stop()
         isActive = false
         log("I.R.I.S deactivated")

@@ -1,30 +1,57 @@
 import SwiftUI
+import AVFoundation
+import Speech
 
 @main
 struct IRISApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var appState = AppState()
     
     var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(appState)
-        }
-        .windowStyle(.hiddenTitleBar)
-        
         MenuBarExtra("I.R.I.S", systemImage: "eye.circle.fill") {
             MenuBarView()
-                .environmentObject(appState)
+                .environmentObject(appDelegate.coordinator)
         }
         .menuBarExtraStyle(.window)
     }
 }
-
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
+    let coordinator = IRISCoordinator()
+    var overlayWindow: NSWindow?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task {
             await requestAllPermissions()
+            setupOverlayWindow()
+            await coordinator.start()
+            print("Auto-started tracking")
         }
+    }
+    
+    private func setupOverlayWindow() {
+        guard let screen = NSScreen.main else { return }
+        
+        let window = NSWindow(
+            contentRect: screen.frame,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        
+        window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.hasShadow = false
+        
+        let hostingView = NSHostingView(rootView: OverlayView().environmentObject(coordinator))
+        window.contentView = hostingView
+        
+        window.orderFrontRegardless()
+        overlayWindow = window
+        
+        print("Overlay window created")
     }
     
     private func requestAllPermissions() async {
@@ -41,18 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         print("Microphone permission: \(micGranted)")
-        
-        print("Skipping speech recognition authorization (requires app bundle)")
     }
-}
-
-@MainActor
-class AppState: ObservableObject {
-    @Published var isTracking = false
-    @Published var gazePoint: CGPoint = .zero
-    @Published var lastTranscript = ""
-    @Published var lastIntent: ResolvedIntent?
-    @Published var isProcessing = false
 }
 
 struct ResolvedIntent: Identifiable {
@@ -62,6 +78,3 @@ struct ResolvedIntent: Identifiable {
     let reasoning: String
     let confidence: Double
 }
-
-import AVFoundation
-import Speech
