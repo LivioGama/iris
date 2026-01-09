@@ -8,15 +8,7 @@ struct OverlayView: View {
             Color.clear
             
             if coordinator.isActive {
-                let corner = coordinator.gazeEstimator.calibrationCorner
-                
-                if corner != .done && corner != .none {
-                    CalibrationTarget(corner: corner)
-                }
-                
-                if corner == .done {
-                    GazeIndicator(point: coordinator.gazePoint)
-                }
+                GazeIndicator(point: coordinator.gazePoint)
                 
                 VStack {
                     Text(coordinator.gazeDebugInfo)
