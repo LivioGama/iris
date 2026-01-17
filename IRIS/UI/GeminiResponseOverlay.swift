@@ -72,6 +72,8 @@ struct GeminiResponseOverlay: View {
                             print("👁️ Overlay disappeared - isListening: \(geminiService.isListening), isProcessing: \(geminiService.isProcessing), messages: \(geminiService.chatMessages.count)")
                         }
                 }
+
+                Spacer()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,7 +87,7 @@ struct GeminiResponseOverlay: View {
                 Image(nsImage: screenshot)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 500, maxHeight: 600)
+                    .frame(maxWidth: 500, maxHeight: 700)
                     .clipped()
             }
 
@@ -142,7 +144,6 @@ struct GeminiResponseOverlay: View {
                                 }
                             }
                         }
-                        .frame(maxHeight: 600)
                         .onChange(of: geminiService.chatMessages.count) { _ in
                             // Scroll to the last message when new messages are added
                             if let lastMessage = geminiService.chatMessages.last {
@@ -161,17 +162,21 @@ struct GeminiResponseOverlay: View {
                         }
                     }
                 }
+
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: 700)
+            .padding(.top, 24)
+            .padding(.trailing, 24)
+            .padding(.bottom, 24)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.9))
                 .shadow(color: Color.black.opacity(0.4), radius: 30)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.trailing, 24)
-        .padding(.bottom, 24)
         .overlay(
             // Close button in top-right corner
             VStack {
@@ -187,6 +192,7 @@ struct GeminiResponseOverlay: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .allowsHitTesting(true)
                     .onHover { hovering in
                         if hovering {
                             NSCursor.pointingHand.push()
@@ -197,6 +203,7 @@ struct GeminiResponseOverlay: View {
                 }
                 Spacer()
             }
+            .allowsHitTesting(true)
         )
         .padding(.horizontal, 40)
         .padding(.bottom, 40)
