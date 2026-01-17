@@ -30,6 +30,8 @@
     <string>I.R.I.S uses speech recognition to transcribe your voice commands.</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>I.R.I.S captures screen content to provide context for intent resolution.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>I.R.I.S uses accessibility APIs to detect UI elements for contextual eye tracking.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
