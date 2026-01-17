@@ -52,6 +52,7 @@ class IRISCoordinator: ObservableObject {
     var currentScreen: NSScreen? = NSScreen.main {
         didSet {
             screenCaptureService.preferredScreen = currentScreen
+            gazeEstimator.currentScreen = currentScreen
         }
     }
 
@@ -73,6 +74,9 @@ class IRISCoordinator: ObservableObject {
         self.intentResolver = container.intentResolver
         self.contextualAnalysis = container.contextualAnalysisService
         self.geminiAssistant = container.geminiAssistant
+
+        // Initialize gaze estimator with current screen
+        self.gazeEstimator.currentScreen = currentScreen
 
         setupBindings()
     }

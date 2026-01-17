@@ -28,6 +28,31 @@ struct OverlayView: View {
     // Debug flag - set to true to show debug overlays
     private let showDebugOverlays = false
 
+    /// Adjust gaze point for display on each screen
+    private func adjustedGazePoint(_ globalPoint: CGPoint) -> CGPoint {
+        // Python is calibrated for 3840×1600 (the large external screen)
+        // Identify screens by SIZE, not by NSScreen.main
+
+        let isExternalScreen = screen.frame.width == 3840 && screen.frame.height == 1600
+        let isMacBookScreen = screen.frame.width == 1800 && screen.frame.height == 1169
+
+        if isExternalScreen {
+            // EXTERNAL screen 3840×1600 - Python coords match directly
+            return globalPoint
+        } else if isMacBookScreen {
+            // MacBook screen 1800×1169 - scale DOWN from 3840×1600
+            let scaleX = 1800.0 / 3840.0  // 0.469
+            let scaleY = 1169.0 / 1600.0  // 0.731
+            return CGPoint(
+                x: globalPoint.x * scaleX,
+                y: globalPoint.y * scaleY
+            )
+        } else {
+            // Unknown screen - use raw coords
+            return globalPoint
+        }
+    }
+
     var body: some View {
         ZStack {
             // Transparent background - never captures clicks
@@ -43,11 +68,13 @@ struct OverlayView: View {
             // Show gaze indicator
             if coordinator.gazeEstimator.isTrackingEnabled && !isGeminiActive {
                 let modeConfig = ModeConfigurationFactory.config(for: "general")
+                let displayPoint = adjustedGazePoint(coordinator.gazeEstimator.gazePoint)
 
                 IRISFuturisticGazeIndicator(
-                    gazePoint: coordinator.gazeEstimator.gazePoint,
+                    gazePoint: displayPoint,
                     detectedElement: coordinator.gazeEstimator.detectedElement,
-                    config: modeConfig.gazeIndicatorStyle
+                    config: modeConfig.gazeIndicatorStyle,
+                    screen: screen
                 )
                 .allowsHitTesting(false)
             }
@@ -70,8 +97,9 @@ struct OverlayView: View {
             // Processing state indicator (only on active screen)
             if coordinator.currentState == .processing,
                coordinator.currentScreen === screen {
+                let displayPoint = adjustedGazePoint(coordinator.gazeEstimator.gazePoint)
                 ProcessingIndicator()
-                    .position(x: coordinator.gazeEstimator.gazePoint.x, y: coordinator.gazeEstimator.gazePoint.y - 60)
+                    .position(x: displayPoint.x, y: displayPoint.y - 60)
                     .allowsHitTesting(false)
             }
 

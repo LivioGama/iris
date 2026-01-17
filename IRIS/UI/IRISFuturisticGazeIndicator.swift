@@ -14,6 +14,7 @@ struct IRISFuturisticGazeIndicator: View {
     let gazePoint: CGPoint
     let detectedElement: DetectedElement?
     let config: GazeIndicatorConfig
+    let screen: NSScreen
 
     @State private var awarenessIntensity: Double = 0.3
     @State private var consciousnessPulse: Double = 1.0
@@ -24,8 +25,12 @@ struct IRISFuturisticGazeIndicator: View {
     var body: some View {
         ZStack {
             // Element rectangle highlight (when detected) - absolute positioning
-            if let element = detectedElement {
-                elementHighlight(for: element)
+            // Only show if the element is on THIS screen
+            if let element = detectedElement,
+               let localBounds = convertToLocalCoordinates(element.bounds),
+               localBounds.width > 0,
+               localBounds.height > 0 {
+                elementHighlight(for: localBounds)
                     .allowsHitTesting(false)
             }
 
@@ -139,10 +144,48 @@ struct IRISFuturisticGazeIndicator: View {
     }
 
     // MARK: - Element Highlighting
+    /// Convert element bounds from global Accessibility coordinates to window local coordinates
+    private func convertToLocalCoordinates(_ globalBounds: CGRect) -> CGRect? {
+        guard !globalBounds.isNull else { return nil }
 
-    private func elementHighlight(for element: DetectedElement) -> some View {
+        let standardized = globalBounds.standardized
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return nil }
+        let mainFrame = NSScreen.main?.frame ?? screen.frame
+        let referenceMaxY = mainFrame.maxY
+        let appKitRect = CGRect(
+            x: standardized.origin.x + mainFrame.minX,
+            y: referenceMaxY - (standardized.origin.y + standardized.height),
+            width: standardized.width,
+            height: standardized.height
+        )
+
+        let screenFrame = screen.frame
+        let intersection = appKitRect.intersection(screenFrame)
+        guard !intersection.isNull, !intersection.isEmpty else {
+            return nil
+        }
+
+        let localX = intersection.origin.x - screenFrame.minX
+        let localBottomY = intersection.origin.y - screenFrame.minY
+        let localTopY = screenFrame.height - localBottomY - intersection.height
+
+        let localRect = CGRect(
+            x: localX,
+            y: localTopY,
+            width: intersection.width,
+            height: intersection.height
+        )
+
+        let logEntry = "🔁 Highlight conversion \(screen.localizedName ?? "screen"): AX \(standardized) → AppKit \(appKitRect) → Local \(localRect) | mainOrigin \(mainFrame.origin)"
+        print(logEntry)
+        try? logEntry.appendLine(to: "/tmp/iris_detection.log")
+
+        return localRect
+    }
+
+    private func elementHighlight(for localBounds: CGRect) -> some View {
         ZStack {
-            // Filled background
             RoundedRectangle(cornerRadius: 8)
                 .fill(
                     LinearGradient(
@@ -154,10 +197,9 @@ struct IRISFuturisticGazeIndicator: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: element.bounds.width, height: element.bounds.height)
-                .position(x: element.bounds.midX, y: element.bounds.midY)
+                .frame(width: localBounds.width, height: localBounds.height)
+                .position(x: localBounds.midX, y: localBounds.midY)
 
-            // Stroke border
             RoundedRectangle(cornerRadius: 8)
                 .stroke(
                     LinearGradient(
@@ -170,8 +212,8 @@ struct IRISFuturisticGazeIndicator: View {
                     ),
                     lineWidth: 2
                 )
-                .frame(width: element.bounds.width, height: element.bounds.height)
-                .position(x: element.bounds.midX, y: element.bounds.midY)
+                .frame(width: localBounds.width, height: localBounds.height)
+                .position(x: localBounds.midX, y: localBounds.midY)
         }
     }
 }

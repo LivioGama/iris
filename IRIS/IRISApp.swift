@@ -185,6 +185,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Update coordinator with current screen for screen capture
             coordinator.currentScreen = newScreen
+
+            let screenName = newScreen == NSScreen.main ? "INTERNAL" : "EXTERNAL"
+            let logMsg = "📍 Screen switched to: \(screenName) at \(newScreen.frame)"
+            print(logMsg)
+            try? logMsg.appendLine(to: "/tmp/iris_detection.log")
         }
     }
 

@@ -36,6 +36,8 @@ public class GazeEstimator: ObservableObject {
 
     public var dominantEye: DominantEye = .left
     public var isTrackingEnabled: Bool = true
+    public var currentScreen: NSScreen? = nil // Track which screen user is looking at
+    public var shouldScaleForExternalScreen: ((CGPoint) -> Bool)? = nil // Callback to determine if we should scale
 
     public var onHoverDetected: ((CGPoint) -> Void)?
     public var onGazeUpdate: ((CGPoint) -> Void)?
@@ -49,6 +51,7 @@ public class GazeEstimator: ObservableObject {
     private var displayPoint: CGPoint = CGPoint(x: 960, y: 540)
 
     private let springStiffness: CGFloat = 0.35 // Matched to original for smoothness
+    private let calibrationResolution = CGSize(width: 3840, height: 1600)
 
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
     private var timer: Timer?
@@ -251,19 +254,30 @@ public class GazeEstimator: ObservableObject {
         lastRealTimeDetectionTime = now
 
         if accessibilityDetector.isAccessibilityEnabled() {
+            var detectionPoint = point
+
+            if let screen = currentScreen ?? NSScreen.main {
+                let (convertedPoint, logMsg) = accessibilityCoordinates(for: point, on: screen)
+                detectionPoint = convertedPoint
+                print(logMsg)
+                try? logMsg.appendLine(to: "/tmp/iris_detection.log")
+            }
+
             // Try to detect specific element first
-            var element = accessibilityDetector.detectElementFast(at: point)
+            var element = accessibilityDetector.detectElementFast(at: detectionPoint)
 
             // If no specific element found, fall back to window detection
             if element == nil {
-                element = accessibilityDetector.detectWindow(at: point)
+                element = accessibilityDetector.detectWindow(at: detectionPoint)
             }
 
             if let element = element {
                 Task { @MainActor in
                     self.detectedElement = element
                     self.onRealTimeDetection?(element)
-                    print("✓ Detected: \(element.label) at \(element.bounds)")
+                    let detectMsg = "✓ Detected: \(element.label) at \(element.bounds)"
+                    print(detectMsg)
+                    try? detectMsg.appendLine(to: "/tmp/iris_detection.log")
                 }
             } else {
                 Task { @MainActor in
@@ -275,6 +289,31 @@ public class GazeEstimator: ObservableObject {
                 self.debugInfo = "Accessibility not enabled!"
             }
         }
+    }
+
+    private func accessibilityCoordinates(for point: CGPoint, on screen: NSScreen) -> (CGPoint, String) {
+        let scaledPoint = scaledPointForScreen(point, screen: screen)
+        let clampedX = min(max(scaledPoint.x, 0), screen.frame.width)
+        let clampedYFromTop = min(max(scaledPoint.y, 0), screen.frame.height)
+        let localX = clampedX
+        let localY = screen.frame.height - clampedYFromTop
+        let globalX = screen.frame.origin.x + localX
+        let globalY = screen.frame.origin.y + localY
+        let mainFrame = NSScreen.main?.frame ?? screen.frame
+        let accessibilityX = globalX - mainFrame.minX
+        let accessibilityY = mainFrame.maxY - globalY
+        let accessibilityPoint = CGPoint(x: accessibilityX, y: accessibilityY)
+        let logMsg = "🔍 SCREEN(\(Int(screen.frame.width))x\(Int(screen.frame.height))): Py(\(Int(point.x)),\(Int(point.y))) → Local(\(Int(localX)),\(Int(localY))) → Global(\(Int(globalX)),\(Int(globalY))) → Acc(\(Int(accessibilityPoint.x)),\(Int(accessibilityPoint.y))) [main:\(Int(mainFrame.minX)),\(Int(mainFrame.maxY))]"
+        return (accessibilityPoint, logMsg)
+    }
+
+    private func scaledPointForScreen(_ point: CGPoint, screen: NSScreen) -> CGPoint {
+        if screen.frame.size == calibrationResolution {
+            return point
+        }
+        let scaleX = screen.frame.width / calibrationResolution.width
+        let scaleY = screen.frame.height / calibrationResolution.height
+        return CGPoint(x: point.x * scaleX, y: point.y * scaleY)
     }
 
     private func triggerGazeUpdate(with point: CGPoint) {
