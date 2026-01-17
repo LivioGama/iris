@@ -33,9 +33,8 @@ public class GazeEstimator: ObservableObject {
 
     private let springStiffness: CGFloat = 0.35 // Increased from 0.15 for snappier visual response
 
-    private var process: Process?
+    private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
     private var timer: Timer?
-    private let processQueue = DispatchQueue(label: "com.iris.python", qos: .userInteractive)
 
     private var lastRealTimeDetectionTime: Date?
     private let realTimeDetectionInterval: TimeInterval = 1.0 / 30.0 // Increased from 15 FPS to 30 FPS for smoother detection
@@ -57,7 +56,44 @@ public class GazeEstimator: ObservableObject {
             targetPoint = center
             displayPoint = center
         }
+        setupProcessManager()
         startAnimationTimer()
+    }
+
+    private func setupProcessManager() {
+        processManager.onOutput = { [weak self] data in
+            self?.parseOutput(data)
+        }
+
+        processManager.onStateChange = { [weak self] state in
+            Task { @MainActor in
+                switch state {
+                case .starting:
+                    self?.debugInfo = "Starting..."
+                case .running:
+                    self?.debugInfo = "Calibrating..."
+                case .recovering:
+                    self?.debugInfo = "Recovering..."
+                    self?.isTracking = false
+                case .failed(let error):
+                    self?.debugInfo = "Error: \(error.localizedDescription)"
+                    self?.isTracking = false
+                case .idle:
+                    self?.debugInfo = "Stopped"
+                    self?.isTracking = false
+                }
+            }
+        }
+
+        processManager.onError = { error in
+            print("❌ GazeEstimator: Process error - \(error.localizedDescription)")
+        }
+
+        processManager.onRecovery = { [weak self] in
+            Task { @MainActor in
+                self?.debugInfo = "Attempting recovery..."
+            }
+        }
     }
 
     private func startAnimationTimer() {
@@ -256,77 +292,24 @@ public class GazeEstimator: ObservableObject {
 
 
     public func start() {
-        guard process == nil else { return }
+        guard !processManager.isRunning else { return }
 
         let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let screenWidth = Int(screen.width)
+        let screenHeight = Int(screen.height)
 
-        var projectDir: String
-        let bundlePath = Bundle.main.bundlePath
-
-        if bundlePath.contains("/.build/") {
-            projectDir = bundlePath.components(separatedBy: "/.build/").first ?? "/Users/livio/Documents/iris2"
-        } else if bundlePath.contains("/DerivedData/") {
-            projectDir = "/Users/livio/Documents/iris2"
-        } else if bundlePath.contains("/IRIS.app") {
-            projectDir = bundlePath.components(separatedBy: "/IRIS.app").first ?? "/Users/livio/Documents/iris2"
-        } else {
-            projectDir = "/Users/livio/Documents/iris2"
-        }
-
-        let pythonPath = "\(projectDir)/gaze_env/bin/python3"
-        let scriptPath = "\(projectDir)/eye_tracker.py"
-
-        guard FileManager.default.fileExists(atPath: pythonPath),
-              FileManager.default.fileExists(atPath: scriptPath) else {
-            Task { @MainActor in
-                self.debugInfo = "Not found"
-            }
-            return
-        }
-
-        processQueue.async { [weak self] in
-            self?.launchPythonProcess(
-                pythonPath: pythonPath,
-                scriptPath: scriptPath,
-                screenWidth: Int(screen.width),
-                screenHeight: Int(screen.height)
-            )
-        }
-    }
-
-    private func launchPythonProcess(pythonPath: String, scriptPath: String, screenWidth: Int, screenHeight: Int) {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: pythonPath)
-        proc.arguments = [scriptPath, "--eye", dominantEye.rawValue, String(screenWidth), String(screenHeight)]
-        proc.environment = ProcessInfo.processInfo.environment
-        proc.environment?["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
-
-        process = proc
+        let arguments = [
+            "--eye", dominantEye.rawValue,
+            String(screenWidth),
+            String(screenHeight)
+        ]
 
         do {
-            try proc.run()
-            Task { @MainActor in
-                self.debugInfo = "Calibrating..."
-            }
+            try processManager.start(arguments: arguments)
         } catch {
             Task { @MainActor in
-                self.debugInfo = "Failed"
+                self.debugInfo = "Failed: \(error.localizedDescription)"
             }
-            return
-        }
-
-        let handle = pipe.fileHandleForReading
-        handle.readabilityHandler = { [weak self] fh in
-            let data = fh.availableData
-            guard !data.isEmpty else {
-                self?.handleProcessEnd()
-                return
-            }
-            self?.parseOutput(data)
         }
     }
 
@@ -374,21 +357,16 @@ public class GazeEstimator: ObservableObject {
         }
     }
 
-    private func handleProcessEnd() {
-        Task { @MainActor in
-            self.debugInfo = "Ended"
-            self.isTracking = false
-        }
-        process = nil
-    }
-
     public func stop() {
-        process?.terminate()
-        process = nil
+        processManager.stop()
         Task { @MainActor in
             self.isTracking = false
             self.debugInfo = "Stopped"
         }
+    }
+
+    public func restart() {
+        processManager.restart()
     }
 
     public func processFrame(_ pixelBuffer: CVPixelBuffer) {
@@ -396,6 +374,6 @@ public class GazeEstimator: ObservableObject {
 
     deinit {
         timer?.invalidate()
-        process?.terminate()
+        processManager.stop()
     }
 }
