@@ -174,10 +174,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupMouseEventObserver() {
+        // When ONLY gaze indicator is showing: ignore mouse events (click-through)
+        // When Gemini overlay is active: accept mouse events for interactive UI
         mouseEventObserver = coordinator.$shouldAcceptMouseEvents
             .receive(on: RunLoop.main)
             .sink { [weak self] shouldAccept in
                 self?.overlayWindows.forEach { window in
+                    // shouldAccept = true when Gemini overlay is active (needs clicks)
+                    // shouldAccept = false when only gaze indicator is showing (click-through)
                     window.ignoresMouseEvents = !shouldAccept
                 }
             }

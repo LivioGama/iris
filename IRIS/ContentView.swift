@@ -8,18 +8,22 @@ struct OverlayView: View {
 
     var body: some View {
         ZStack {
+            // Transparent background - never captures clicks
             Color.clear
+                .allowsHitTesting(false)
 
             // Hide indicator when Gemini overlay is active
             let isGeminiActive = coordinator.geminiAssistant.isListening ||
                                 coordinator.geminiAssistant.isProcessing ||
-                                !coordinator.geminiAssistant.chatMessages.isEmpty
+                                !coordinator.geminiAssistant.chatMessages.isEmpty ||
+                                coordinator.geminiAssistant.capturedScreenshot != nil
 
             if coordinator.gazeEstimator.isTrackingEnabled && !isGeminiActive {
                 ContextualGazeIndicator(
                     gazePoint: coordinator.gazeEstimator.gazePoint,
                     detectedElement: coordinator.gazeEstimator.detectedElement
                 )
+                .allowsHitTesting(false)
             }
 
             VStack {
@@ -33,16 +37,20 @@ struct OverlayView: View {
                 Spacer()
             }
             .padding(.top, 50)
+            .allowsHitTesting(false)
 
             if coordinator.currentState == .processing {
                 ProcessingIndicator()
                     .position(x: coordinator.gazeEstimator.gazePoint.x, y: coordinator.gazeEstimator.gazePoint.y - 60)
+                    .allowsHitTesting(false)
             }
 
             if let intent = coordinator.lastIntent {
                 IntentResultView(intent: intent)
+                    .allowsHitTesting(false)
             }
 
+            // Only the Gemini overlay should accept hits when active
             GeminiResponseOverlay(geminiService: coordinator.geminiAssistant)
 
             VStack {
@@ -53,6 +61,7 @@ struct OverlayView: View {
                 }
                 .padding(20)
             }
+            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

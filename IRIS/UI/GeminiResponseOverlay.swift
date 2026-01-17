@@ -43,16 +43,28 @@ struct GeminiResponseOverlay: View {
 
     private var content: some View {
         ZStack {
-            // Background that doesn't capture clicks
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)
+            // Transparent background - click through when no overlay
+            if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil {
+                // Dark background when overlay is active - blocks clicks behind overlay
+                Color.black.opacity(0.001)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(true)
+                    .onTapGesture {
+                        // Clicking background does nothing - prevents clicks from going through
+                    }
+            } else {
+                // No overlay - completely transparent and click-through
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+            }
 
             VStack {
                 Spacer()
 
                 if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil {
                     mainContentView
+                        .allowsHitTesting(true)
                         .onAppear {
                             print("👁️ Overlay appeared - isListening: \(geminiService.isListening), isProcessing: \(geminiService.isProcessing), messages: \(geminiService.chatMessages.count)")
                         }
