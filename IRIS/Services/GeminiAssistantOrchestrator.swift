@@ -117,6 +117,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             return
         }
 
+        // Check if screenshot is blank/white before opening overlay
+        if isBlankScreenshot(screenshot) {
+            print("⚠️ Screenshot is blank, ignoring blink")
+            return
+        }
+
         // Store screenshot and focused element
         self.capturedScreenshot = screenshot
         self.currentFocusedElement = focusedElement
@@ -160,8 +166,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self?.countdownTimer = nil
                 self?.remainingTimeout = nil
 
-                // Add placeholder user message bubble immediately
-                self?.chatMessages.append(ChatMessage(role: .user, content: "...", timestamp: Date()))
+                // Don't add placeholder - we have live transcription
             }
         }, onPartialResult: { [weak self] partialText in
             // Update live transcription in real-time
@@ -349,8 +354,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.isProcessing = true
             // Don't add user message here - it's already been added and replaced from loading bubble
 
-            // Add assistant loading bubble immediately
-            self.chatMessages.append(ChatMessage(role: .assistant, content: "...", timestamp: Date()))
+            // Don't add placeholder - we'll use liveGeminiResponse for streaming
         }
 
         print("✅ isProcessing set, continuing...")
@@ -498,8 +502,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
             }
 
-            // Add assistant loading bubble immediately
-            self.chatMessages.append(ChatMessage(role: .assistant, content: "...", timestamp: Date()))
+            // Don't add placeholder - we'll use liveGeminiResponse for streaming
         }
 
         // Handle message selection
@@ -906,8 +909,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             self.voiceInteractionService.startListening(timeout: nil, useExternalAudio: true, onSpeechDetected: { [weak self] in
                 DispatchQueue.main.async {
-                    // Add placeholder user message bubble immediately on speech detection
-                    self?.chatMessages.append(ChatMessage(role: .user, content: "...", timestamp: Date()))
+                    // Don't add placeholder - we have live transcription
                 }
             }, onPartialResult: { [weak self] partialText in
                 // Update live transcription in real-time
@@ -1075,5 +1077,48 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
 
         return markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isBlankScreenshot(_ image: NSImage) -> Bool {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return false
+        }
+
+        // Sample a small grid of pixels to check if image is mostly white
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0 && height > 0 else { return true }
+
+        let sampleSize = min(100, min(width, height))
+        let step = max(1, min(width, height) / sampleSize)
+
+        var whitePixelCount = 0
+        var totalSampled = 0
+
+        guard let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return false
+        }
+
+        for y in stride(from: 0, to: height, by: step) {
+            for x in stride(from: 0, to: width, by: step) {
+                let pixelIndex = (y * width + x) * 4
+                if pixelIndex + 2 < CFDataGetLength(data) {
+                    let r = bytes[pixelIndex]
+                    let g = bytes[pixelIndex + 1]
+                    let b = bytes[pixelIndex + 2]
+
+                    // Consider pixel white if all channels are > 250
+                    if r > 250 && g > 250 && b > 250 {
+                        whitePixelCount += 1
+                    }
+                    totalSampled += 1
+                }
+            }
+        }
+
+        // If more than 95% of sampled pixels are white, consider it blank
+        let whiteRatio = Double(whitePixelCount) / Double(totalSampled)
+        return whiteRatio > 0.95
     }
 }

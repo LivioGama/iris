@@ -208,18 +208,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupMouseEventObserver() {
-        // When Gemini overlay is active, bring window to front but keep click-through
-        // SwiftUI views inside will handle their own hit testing
+        // When Gemini overlay is active, make it interactive like a normal window
         mouseEventObserver = coordinator.$shouldAcceptMouseEvents
             .receive(on: RunLoop.main)
             .sink { [weak self] shouldAccept in
                 self?.overlayWindows.forEach { window in
                     if shouldAccept {
-                        // Gemini overlay is active - bring to front
+                        // Gemini overlay is active - make it interactive
                         window.level = .floating
-                        window.ignoresMouseEvents = true
+                        window.ignoresMouseEvents = false  // ACCEPT clicks on the window
                     } else {
-                        // Only gaze indicator - stay behind
+                        // Only gaze indicator - click-through
                         window.level = .normal
                         window.ignoresMouseEvents = true
                     }
