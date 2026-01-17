@@ -36,18 +36,81 @@ public class GazeEstimator: ObservableObject {
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
     private var timer: Timer?
 
+    // Adaptive Frame Rate System
+    private enum FrameRateMode {
+        case highPerformance  // 60 FPS - simple UI, no heavy processing
+        case lowPower        // 15 FPS - heavy processing active
+    }
+    private var currentFrameRateMode: FrameRateMode = .highPerformance
+    private let highPerformanceFPS: TimeInterval = 1.0 / 60.0
+    private let lowPowerFPS: TimeInterval = 1.0 / 15.0
+    private var heavyProcessingActive: Bool = false {
+        didSet {
+            updateFrameRateMode()
+        }
+    }
+
     private var lastRealTimeDetectionTime: Date?
-    private let realTimeDetectionInterval: TimeInterval = 1.0 / 30.0 // Increased from 15 FPS to 30 FPS for smoother detection
+    private let realTimeDetectionInterval: TimeInterval = 1.0 / 30.0 // Maintain 30 FPS element detection
     private let accessibilityDetector = AccessibilityDetector()
     private let computerVisionDetector = ComputerVisionDetector()
 
-    private var hoverDetectionBuffer: [CGPoint] = []
-    private let hoverThreshold: CGFloat = 30.0
-    private let hoverDuration: TimeInterval = 0.15 // Reduced from 0.5 to 0.15 seconds for instant feel
-    private let stabilityWindowSize = 5 // Reduced from 10 to 5 for faster response
-    private let debounceInterval: TimeInterval = 0.05 // Reduced from 0.1 to 0.05 for faster checks
-    private var lastHoverCheckTime: Date?
-    private var hoverStartTime: Date?
+    // Temporal Stability Filter (replaces buffer-based approach)
+    private struct TemporalStability {
+        var lastPosition: CGPoint?
+        var stabilityStartTime: Date?
+        var movementHistory: [(time: Date, distance: CGFloat)] = []
+        let maxHistorySize = 10
+        let stabilityRadius: CGFloat = 30.0
+        let requiredStableDuration: TimeInterval = 0.15
+
+        mutating func update(newPosition: CGPoint) -> Bool {
+            let now = Date()
+
+            guard let lastPos = lastPosition else {
+                lastPosition = newPosition
+                stabilityStartTime = now
+                return false
+            }
+
+            let distance = hypot(newPosition.x - lastPos.x, newPosition.y - lastPos.y)
+
+            // Add to movement history
+            movementHistory.append((time: now, distance: distance))
+            if movementHistory.count > maxHistorySize {
+                movementHistory.removeFirst()
+            }
+
+            // Check if movement is within stability radius
+            if distance <= stabilityRadius {
+                // Stable position - check duration
+                if stabilityStartTime == nil {
+                    stabilityStartTime = now
+                }
+
+                if let startTime = stabilityStartTime,
+                   now.timeIntervalSince(startTime) >= requiredStableDuration {
+                    return true // Hover detected
+                }
+            } else {
+                // Movement detected - reset stability
+                stabilityStartTime = nil
+            }
+
+            lastPosition = newPosition
+            return false
+        }
+
+        mutating func reset() {
+            stabilityStartTime = nil
+        }
+
+        func getStablePosition() -> CGPoint? {
+            return lastPosition
+        }
+    }
+
+    private var temporalStability = TemporalStability()
     private var analysisInProgress = false
 
     public init() {
@@ -97,11 +160,39 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func startAnimationTimer() {
-        DispatchQueue.main.async {
-            self.timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
+        updateAnimationTimer()
+    }
+
+    private func updateAnimationTimer() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            // Invalidate existing timer
+            self.timer?.invalidate()
+
+            // Determine frame rate based on current mode
+            let frameInterval = self.currentFrameRateMode == .highPerformance ? self.highPerformanceFPS : self.lowPowerFPS
+
+            // Create new timer with adaptive frame rate
+            self.timer = Timer.scheduledTimer(withTimeInterval: frameInterval, repeats: true) { [weak self] _ in
                 self?.animateToTarget()
             }
         }
+    }
+
+    private func updateFrameRateMode() {
+        let newMode: FrameRateMode = heavyProcessingActive ? .lowPower : .highPerformance
+
+        if newMode != currentFrameRateMode {
+            currentFrameRateMode = newMode
+            let fps = newMode == .highPerformance ? 60 : 15
+            print("📊 Frame rate mode changed to \(fps) FPS (\(newMode == .highPerformance ? "high performance" : "low power"))")
+            updateAnimationTimer()
+        }
+    }
+
+    public func setHeavyProcessing(_ active: Bool) {
+        heavyProcessingActive = active
     }
 
     private func animateToTarget() {
@@ -166,130 +257,44 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func updateHoverDetection(with point: CGPoint) {
-        guard isTrackingEnabled else { return }
-
-        // Add current point to buffer
-        hoverDetectionBuffer.append(point)
-        if hoverDetectionBuffer.count > stabilityWindowSize {
-            hoverDetectionBuffer.removeFirst()
-        }
-
-        // Debounced hover stability check
-        let now = Date()
-        if let lastCheck = lastHoverCheckTime, now.timeIntervalSince(lastCheck) < debounceInterval {
-            return
-        }
-        lastHoverCheckTime = now
-
-        guard hoverDetectionBuffer.count >= stabilityWindowSize else {
-            // Clear hover state if buffer is too small
-            hoverStartTime = nil
+        guard isTrackingEnabled else {
+            temporalStability.reset()
             return
         }
 
-        // Check if gaze is stable using improved metrics
-        let stabilityScore = calculateStabilityScore()
+        // Use temporal stability filter
+        let isHovering = temporalStability.update(newPosition: point)
 
-        if stabilityScore >= 0.7 { // Reduced from 80% to 70% for faster triggering
-            if hoverStartTime == nil {
-                // Start hover timer
-                hoverStartTime = now
-                Task { @MainActor in
-                    if let element = self.detectedElement {
-                        let typeStr = String(describing: element.type)
-                        let size = "\(Int(element.bounds.width))×\(Int(element.bounds.height))"
-                        self.debugInfo = "Hover: \(element.label) | \(typeStr) | \(size)"
-                    } else {
-                        self.debugInfo = "Hover started..."
-                    }
-                }
-            } else if now.timeIntervalSince(hoverStartTime!) >= hoverDuration && !analysisInProgress {
-                // Hover detected - trigger analysis
-                analysisInProgress = true
-                let stablePoint = computeStableGaze()
-                Task { @MainActor in
+        if isHovering && !analysisInProgress {
+            // Hover detected - trigger analysis
+            analysisInProgress = true
+            setHeavyProcessing(true) // Switch to low power mode during analysis
+
+            guard let stablePoint = temporalStability.getStablePosition() else { return }
+
+            Task { @MainActor in
+                if let element = self.detectedElement {
+                    let typeStr = String(describing: element.type)
+                    let size = "\(Int(element.bounds.width))×\(Int(element.bounds.height))"
+                    self.debugInfo = "Hover: \(element.label) | \(typeStr) | \(size)"
+                } else {
                     self.debugInfo = "Hover detected! Analyzing..."
                 }
-                onHoverDetected?(stablePoint)
-
-                // Reset hover state but keep analysis flag
-                hoverStartTime = nil
-
-                // Reset analysis flag after delay to prevent spam
-                Task {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                    analysisInProgress = false
-                }
             }
-        } else {
-            // Reset hover state if stability drops
-            hoverStartTime = nil
-            if stabilityScore < 0.5 {
-                Task { @MainActor in
-                    self.debugInfo = "Gaze unstable (\(Int(stabilityScore * 100))%)"
-                }
+
+            onHoverDetected?(stablePoint)
+
+            // Reset temporal stability after detection
+            temporalStability.reset()
+
+            // Reset analysis flag and restore high performance mode after delay
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                analysisInProgress = false
+                setHeavyProcessing(false) // Restore high performance mode
             }
         }
     }
-
-    private func calculateStabilityScore() -> Double {
-        guard hoverDetectionBuffer.count >= stabilityWindowSize else { return 0.0 }
-
-        // Calculate centroid of all points
-        var totalX: CGFloat = 0
-        var totalY: CGFloat = 0
-
-        for point in hoverDetectionBuffer {
-            totalX += point.x
-            totalY += point.y
-        }
-
-        let centroid = CGPoint(
-            x: totalX / CGFloat(hoverDetectionBuffer.count),
-            y: totalY / CGFloat(hoverDetectionBuffer.count)
-        )
-
-        // Calculate average distance from centroid
-        var totalDistance: CGFloat = 0
-        for point in hoverDetectionBuffer {
-            let distance = hypot(point.x - centroid.x, point.y - centroid.y)
-            totalDistance += distance
-        }
-
-        let averageDistance = totalDistance / CGFloat(hoverDetectionBuffer.count)
-
-        // Calculate variance (how spread out the points are)
-        var variance: CGFloat = 0
-        for point in hoverDetectionBuffer {
-            let distance = hypot(point.x - centroid.x, point.y - centroid.y)
-            variance += pow(distance - averageDistance, 2)
-        }
-        variance /= CGFloat(hoverDetectionBuffer.count)
-
-        // Calculate standard deviation
-        let standardDeviation = sqrt(variance)
-
-        // Stability score: lower standard deviation = higher stability
-        // Score ranges from 0 (unstable) to 1 (very stable)
-        let maxAcceptableDeviation = hoverThreshold / 2.0 // Half the threshold
-        let stabilityScore = max(0.0, min(1.0, 1.0 - (standardDeviation / maxAcceptableDeviation)))
-
-        return stabilityScore
-    }
-
-    private func computeStableGaze() -> CGPoint {
-        guard !hoverDetectionBuffer.isEmpty else { return .zero }
-
-        let sum = hoverDetectionBuffer.reduce(CGPoint.zero) {
-            CGPoint(x: $0.x + $1.x, y: $0.y + $1.y)
-        }
-
-        return CGPoint(
-            x: sum.x / CGFloat(hoverDetectionBuffer.count),
-            y: sum.y / CGFloat(hoverDetectionBuffer.count)
-        )
-    }
-
 
     public func start() {
         guard !processManager.isRunning else { return }

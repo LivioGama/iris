@@ -153,6 +153,7 @@ class IRISCoordinator: ObservableObject {
     }
 
     private func performContextualAnalysis(at gazePoint: CGPoint) async {
+        // Note: GazeEstimator already sets heavy processing mode when triggering hover
         do {
             let screenImage = try await screenCaptureService.captureScreen(at: gazePoint)
 
@@ -176,6 +177,12 @@ class IRISCoordinator: ObservableObject {
 
     private func processIntent(gazePoint: CGPoint, transcript: String) async {
         log("Processing intent at \(gazePoint)")
+
+        // Enable low power mode during heavy intent processing
+        gazeEstimator.setHeavyProcessing(true)
+        defer {
+            gazeEstimator.setHeavyProcessing(false)
+        }
 
         do {
             let fullScreen = try await screenCaptureService.captureFullScreen()
