@@ -111,7 +111,7 @@ struct OverlayView: View {
                     .allowsHitTesting(false)
             }
 
-            // Gemini overlay is now a separate window - removed from here
+            GeminiResponseOverlayModern(geminiService: coordinator.geminiAssistant)
 
             if showDebugOverlays {
                 VStack {

@@ -109,8 +109,15 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         lastBlinkTime = Date()
         print("🔵 Blink detected at \(point)")
 
-        // Capture screenshot with error handling
-        guard let screenshot = screenshotService.captureCurrentScreen() else {
+        // Capture screenshot at gaze point (screen where user is looking)
+        guard let gazeScreen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
+            print("❌ No screen found at gaze point \(point)")
+            self.isProcessing = false
+            self.isListening = false
+            return
+        }
+
+        guard let screenshot = screenshotService.captureScreen(gazeScreen) else {
             print("❌ Failed to capture screenshot")
             self.isProcessing = false
             self.isListening = false
@@ -157,9 +164,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.isListeningForBuffers = true
             self.bufferCount = 0
             print("🎤 Set isListeningForBuffers = true BEFORE startListening")
+
+            print("🎤 Calling voiceInteractionService.startListening...")
         }
 
         voiceInteractionService.startListening(timeout: timeoutDuration, useExternalAudio: true, onSpeechDetected: { [weak self] in
+            print("🗣️ Speech detected callback triggered!")
             print("🎤 Speech detected! Stopping countdown...")
             // Stop countdown when speech is detected
             DispatchQueue.main.async {

@@ -15,15 +15,6 @@ struct IRISApp: App {
                 .environmentObject(appDelegate.coordinator)
         }
         .menuBarExtraStyle(.window)
-
-        // Gemini overlay window - regular draggable window
-        Window("IRIS Assistant", id: "gemini-overlay") {
-            GeminiResponseOverlayModern(geminiService: appDelegate.coordinator.geminiAssistant)
-                .frame(minWidth: 400, minHeight: 300)
-        }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultPosition(.center)
     }
 }
 @MainActor
@@ -32,7 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = DependencyContainer.shared.makeCoordinator()
     var overlayWindows: [NSWindow] = []
     private var screenTimer: Timer?
-    private var mouseEventObserver: AnyCancellable?
     private var mouseMonitor: Any?
     private var currentMouseScreen: NSScreen?
 
@@ -59,7 +49,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             checkAndRequestAPIKey()
 
             setupOverlayWindows()
-            setupMouseEventObserver()
             setupMouseTracking()
             await coordinator.start()
             print("Auto-started tracking")
@@ -216,48 +205,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func setupMouseEventObserver() {
-        // When Gemini has messages, open the window
-        mouseEventObserver = coordinator.geminiAssistant.$chatMessages
-            .receive(on: RunLoop.main)
-            .sink { [weak self] messages in
-                if !messages.isEmpty {
-                    // Open the Gemini overlay window
-                    self?.openGeminiWindow()
-                } else {
-                    // Close the Gemini overlay window
-                    self?.closeGeminiWindow()
-                }
-            }
-    }
-
-    private func openGeminiWindow() {
-        // Open the window using the scene ID
-        if let url = URL(string: "iris://gemini-overlay") {
-            NSWorkspace.shared.open(url)
-        }
-
-        // Alternative: Use window controller
-        DispatchQueue.main.async {
-            for window in NSApp.windows {
-                if window.identifier?.rawValue == "gemini-overlay" {
-                    window.makeKeyAndOrderFront(nil)
-                    return
-                }
-            }
-        }
-    }
-
-    private func closeGeminiWindow() {
-        DispatchQueue.main.async {
-            for window in NSApp.windows {
-                if window.identifier?.rawValue == "gemini-overlay" {
-                    window.orderOut(nil)
-                    return
-                }
-            }
-        }
-    }
 
     private func setupOverlayWindows() {
         for screen in NSScreen.screens {

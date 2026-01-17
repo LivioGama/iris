@@ -55,15 +55,18 @@ def main():
     ema_nose_x, ema_nose_y = 0.5, 0.5
 
     # Blink detection thresholds
-    EYE_AR_THRESH = 0.21
+    EYE_AR_THRESH = 0.25  # Increased threshold - easier to trigger
     EYE_AR_CONSEC_FRAMES = 2
     blink_counter = 0
     is_blinking = False
 
     # Long blink detection for screenshot trigger
     # Normal blink: ~3-5 frames (0.1-0.17 seconds)
-    # Intentional long blink: 15 frames (0.5 seconds) - clearly intentional
-    LONG_BLINK_THRESH = 15
+    # Intentional long blink: 4 frames (0.13 seconds) - responsive
+    LONG_BLINK_THRESH = 4
+
+    # Debug: print eye aspect ratio every 30 frames
+    frame_debug_counter = 0
     eyes_closed_counter = 0
     long_blink_triggered = False
 
@@ -106,6 +109,11 @@ def main():
                 horizontal_dist = abs(left_eye_right.x - left_eye_left.x)
                 eye_aspect_ratio = vertical_dist / horizontal_dist if horizontal_dist > 0 else 1.0
 
+                # Debug: Print EAR periodically
+                frame_debug_counter += 1
+                if frame_debug_counter % 90 == 0:  # Every 3 seconds at 30fps
+                    print(f"👁️ EAR: {eye_aspect_ratio:.3f} (thresh: {EYE_AR_THRESH}, closed_count: {eyes_closed_counter})", file=sys.stderr, flush=True)
+
                 if eye_aspect_ratio < EYE_AR_THRESH:
                     blink_counter += 1
                     eyes_closed_counter += 1
@@ -114,6 +122,7 @@ def main():
                     # Trigger at 6 frames (~0.2s) - slightly longer than normal blink
                     if eyes_closed_counter >= LONG_BLINK_THRESH and not long_blink_triggered:
                         long_blink_triggered = True
+                        print(f"🔔 BLINK TRIGGERED! eyes_closed_counter={eyes_closed_counter}", file=sys.stderr, flush=True)
                         # Send blink event for screenshot using binary protocol
                         send_binary_blink(ema_x, ema_y)
                 else:
