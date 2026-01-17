@@ -187,6 +187,12 @@ public class PythonProcessManager {
         proc.environment = ProcessInfo.processInfo.environment
         proc.environment?["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
+        // CRITICAL: Set process group so Python dies when Swift app crashes
+        // This prevents orphaned Python processes
+        #if os(macOS)
+        proc.qualityOfService = .userInteractive
+        #endif
+
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         proc.standardOutput = outputPipe

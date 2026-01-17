@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentMouseScreen: NSScreen?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Setup signal handlers to cleanup Python processes on crash
+        setupSignalHandlers()
+
         Task {
             await requestAllPermissions()
             setupOverlayWindows()
@@ -34,6 +37,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await coordinator.start()
             print("Auto-started tracking")
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Ensure Python processes are stopped
+        print("🛑 App terminating, cleaning up...")
+        coordinator.stop()
+        cleanupOrphanedPythonProcesses()
+    }
+
+    private func setupSignalHandlers() {
+        // Handle crashes and forced terminations
+        signal(SIGTERM) { _ in
+            print("🛑 SIGTERM received, cleaning up...")
+            Task { @MainActor in
+                AppDelegate.cleanup()
+            }
+            exit(0)
+        }
+
+        signal(SIGINT) { _ in
+            print("🛑 SIGINT received, cleaning up...")
+            Task { @MainActor in
+                AppDelegate.cleanup()
+            }
+            exit(0)
+        }
+    }
+
+    private static func cleanup() {
+        // Kill all eye_tracker.py processes
+        let task = Process()
+        task.launchPath = "/usr/bin/pkill"
+        task.arguments = ["-f", "eye_tracker.py"]
+        try? task.run()
+        task.waitUntilExit()
+    }
+
+    private func cleanupOrphanedPythonProcesses() {
+        let task = Process()
+        task.launchPath = "/usr/bin/pkill"
+        task.arguments = ["-f", "eye_tracker.py"]
+        try? task.run()
+        task.waitUntilExit()
     }
 
     private func setupMouseTracking() {

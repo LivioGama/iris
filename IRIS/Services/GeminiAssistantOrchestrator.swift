@@ -68,9 +68,13 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         print("🔵 Blink detected at \(point)")
 
-        // Capture screenshot
+        // Capture screenshot with error handling
         guard let screenshot = screenshotService.captureCurrentScreen() else {
             print("❌ Failed to capture screenshot")
+            DispatchQueue.main.async {
+                self.isProcessing = false
+                self.isListening = false
+            }
             return
         }
 
@@ -95,6 +99,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         voiceInteractionService.startListening(timeout: 12.0) { [weak self] prompt in
             guard let self = self else { return }
+
+            print("📥 Voice callback received: '\(prompt)'")
 
             DispatchQueue.main.async {
                 self.isListening = false
