@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import AppKit
+import IRISCore
+import IRISVision
+import IRISGaze
+import IRISNetwork
+import IRISMedia
 
 @MainActor
 class IRISCoordinator: ObservableObject {

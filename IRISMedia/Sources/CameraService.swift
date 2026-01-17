@@ -1,14 +1,18 @@
 import AVFoundation
 import CoreImage
 
-class CameraService: NSObject, ObservableObject {
-    @MainActor @Published var currentFrame: CIImage?
-    @MainActor @Published var isRunning = false
+public class CameraService: NSObject, ObservableObject {
+    public override init() {
+        super.init()
+    }
+
+    @MainActor @Published public var currentFrame: CIImage?
+    @MainActor @Published public var isRunning = false
     
     private let sessionLock = NSLock()
     private var _onFrame: (@Sendable (CVPixelBuffer) -> Void)?
     
-    var onFrame: (@Sendable (CVPixelBuffer) -> Void)? {
+    public var onFrame: (@Sendable (CVPixelBuffer) -> Void)? {
         get { sessionLock.lock(); defer { sessionLock.unlock() }; return _onFrame }
         set { sessionLock.lock(); _onFrame = newValue; sessionLock.unlock() }
     }
@@ -17,7 +21,7 @@ class CameraService: NSObject, ObservableObject {
     private let processingQueue = DispatchQueue(label: "camera.processing")
     
     @MainActor
-    func start() async throws {
+    public func start() async throws {
         guard await checkPermission() else {
             throw CameraError.permissionDenied
         }
@@ -50,7 +54,7 @@ class CameraService: NSObject, ObservableObject {
     }
     
     @MainActor
-    func stop() {
+    public func stop() {
         captureSession?.stopRunning()
         isRunning = false
     }
@@ -66,7 +70,7 @@ class CameraService: NSObject, ObservableObject {
 }
 
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
-    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    public nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         self.onFrame?(pixelBuffer)
         
@@ -76,7 +80,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 }
 
-enum CameraError: Error {
+public enum CameraError: Error {
     case permissionDenied
     case deviceNotAvailable
 }

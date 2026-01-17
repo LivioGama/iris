@@ -1,12 +1,13 @@
 import Foundation
 import NaturalLanguage
+import IRISCore
 
-struct SentimentAnalysisResponse: Codable {
+public struct SentimentAnalysisResponse: Codable {
     let analysis: String
 }
 
 // Gemini API structures
-struct GeminiAnalysisRequest: Codable {
+public struct GeminiAnalysisRequest: Codable {
     struct Content: Codable {
         struct Part: Codable {
             let text: String
@@ -16,7 +17,7 @@ struct GeminiAnalysisRequest: Codable {
     let contents: [Content]
 }
 
-struct GeminiAnalysisResponse: Codable {
+public struct GeminiAnalysisResponse: Codable {
     struct Candidate: Codable {
         struct Content: Codable {
             struct Part: Codable {
@@ -29,7 +30,7 @@ struct GeminiAnalysisResponse: Codable {
     let candidates: [Candidate]
 }
 
-class SentimentAnalysisService {
+public class SentimentAnalysisService {
     static let shared = SentimentAnalysisService()
 
     private let apiKey: String
@@ -45,7 +46,7 @@ class SentimentAnalysisService {
     Texte:
     """
 
-    init() {
+    public init() {
         // Try to get API key from Keychain first, fallback to environment variable for backwards compatibility
         if let keychainKey = try? KeychainService.shared.getAPIKey() {
             self.apiKey = keychainKey
@@ -54,7 +55,7 @@ class SentimentAnalysisService {
         }
     }
 
-    func analyzeSentiment(_ text: String) async throws -> SentimentAnalysisResponse {
+    public func analyzeSentiment(_ text: String) async throws -> SentimentAnalysisResponse {
         guard !apiKey.isEmpty else {
             throw NSError(domain: "SentimentAnalysis", code: -1, userInfo: [NSLocalizedDescriptionKey: "GEMINI_API_KEY not set"])
         }
@@ -99,7 +100,7 @@ class SentimentAnalysisService {
         return SentimentAnalysisResponse(analysis: analysis)
     }
 
-    func detectsSentimentRequest(in prompt: String) -> Bool {
+    public func detectsSentimentRequest(in prompt: String) -> Bool {
         let lowercased = prompt.lowercased()
         let sentimentKeywords = [
             "judge",
@@ -118,7 +119,7 @@ class SentimentAnalysisService {
         }
     }
 
-    func detectsMessageNumber(in prompt: String) -> Int? {
+    public func detectsMessageNumber(in prompt: String) -> Int? {
         // NER-style extraction using Apple's NaturalLanguage framework
         let lowercased = prompt.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
 

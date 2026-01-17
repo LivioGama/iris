@@ -1,25 +1,12 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import IRISCore
+import IRISVision
 
-extension String {
-    func appendLine(to path: String) throws {
-        let line = self + "\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: path) {
-                if let fileHandle = FileHandle(forWritingAtPath: path) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    fileHandle.closeFile()
-                }
-            } else {
-                try data.write(to: URL(fileURLWithPath: path))
-            }
-        }
-    }
-}
+public class ContextualAnalysisService {
+    public init() {}
 
-class ContextualAnalysisService {
     private let accessibilityDetector = AccessibilityDetector()
     private let visionTextDetector = VisionTextDetector()
     private let computerVisionDetector = ComputerVisionDetector()
@@ -34,7 +21,7 @@ class ContextualAnalysisService {
     private var pendingRequests: [(point: CGPoint, image: CGImage)] = []
     private let queueLock = NSLock()
 
-    func analyzeContext(around gazePoint: CGPoint, screenImage: CGImage) async -> DetectedElement? {
+    public func analyzeContext(around gazePoint: CGPoint, screenImage: CGImage) async -> DetectedElement? {
         // If analysis is in progress, queue this request
         queueLock.lock()
         if analysisInProgress {
@@ -223,7 +210,7 @@ class ContextualAnalysisService {
 }
 
 extension CGRect {
-    var center: CGPoint {
+    public var center: CGPoint {
         return CGPoint(x: midX, y: midY)
     }
 }

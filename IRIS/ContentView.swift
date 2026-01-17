@@ -1,4 +1,6 @@
 import SwiftUI
+import IRISCore
+import IRISGaze
 
 struct OverlayView: View {
     @EnvironmentObject var coordinator: IRISCoordinator

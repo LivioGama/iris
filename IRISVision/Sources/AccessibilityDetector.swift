@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import ApplicationServices
 import AppKit
+import IRISCore
 
 extension CGRect {
     var area: CGFloat {
@@ -9,17 +10,17 @@ extension CGRect {
     }
 }
 
-class AccessibilityDetector {
+public class AccessibilityDetector {
     private let systemWideElement: AXUIElement
 
-    init() {
+    public init() {
         systemWideElement = AXUIElementCreateSystemWide()
     }
 
-    func buildElementIndex() {
+    public func buildElementIndex() {
     }
 
-    func findElement(at point: CGPoint) -> DetectedElement? {
+    public func findElement(at point: CGPoint) -> DetectedElement? {
         guard var element = getElementAt(point: point) else {
             return nil
         }
@@ -104,10 +105,10 @@ class AccessibilityDetector {
                bounds.area >= minArea
     }
 
-    func clearCache() {
+    public func clearCache() {
     }
 
-    func getElementAt(point: CGPoint) -> AXUIElement? {
+    public func getElementAt(point: CGPoint) -> AXUIElement? {
         var element: AXUIElement?
 
         let result = AXUIElementCopyElementAtPosition(
@@ -124,7 +125,7 @@ class AccessibilityDetector {
         return nil
     }
 
-    func getElementBounds(_ element: AXUIElement) -> CGRect? {
+    public func getElementBounds(_ element: AXUIElement) -> CGRect? {
         var value: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(
@@ -157,7 +158,7 @@ class AccessibilityDetector {
         return CGRect(origin: position, size: size)
     }
 
-    func getElementRole(_ element: AXUIElement) -> String? {
+    public func getElementRole(_ element: AXUIElement) -> String? {
         var value: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(
@@ -173,7 +174,7 @@ class AccessibilityDetector {
         return nil
     }
 
-    func getElementLabel(_ element: AXUIElement) -> String? {
+    public func getElementLabel(_ element: AXUIElement) -> String? {
         var value: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(
@@ -189,7 +190,7 @@ class AccessibilityDetector {
         return nil
     }
 
-    func mapRoleToElementType(_ role: String) -> ElementType {
+    public func mapRoleToElementType(_ role: String) -> ElementType {
         if isSidebarRole(role) {
             return .sidebar
         }
@@ -245,15 +246,15 @@ class AccessibilityDetector {
         return (isLeftEdge || isRightEdge) && isNarrow && isTall
     }
 
-    func isAccessibilityEnabled() -> Bool {
+    public func isAccessibilityEnabled() -> Bool {
         return AXIsProcessTrusted()
     }
 
-    func detectElement(around point: CGPoint) -> DetectedElement? {
+    public func detectElement(around point: CGPoint) -> DetectedElement? {
         return findElement(at: point)
     }
 
-    func detectElementFast(at point: CGPoint) -> DetectedElement? {
+    public func detectElementFast(at point: CGPoint) -> DetectedElement? {
         guard isAccessibilityEnabled() else {
             print("⚠️  Accessibility NOT enabled")
             return nil
@@ -273,7 +274,7 @@ class AccessibilityDetector {
         return element
     }
 
-    func detectWindow(at point: CGPoint) -> DetectedElement? {
+    public func detectWindow(at point: CGPoint) -> DetectedElement? {
         guard isAccessibilityEnabled() else {
             print("❌ Window detection: Accessibility not enabled")
             return nil

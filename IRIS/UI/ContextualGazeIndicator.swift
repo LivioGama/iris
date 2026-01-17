@@ -1,4 +1,5 @@
 import SwiftUI
+import IRISCore
 
 struct ContextualGazeIndicator: View {
     let gazePoint: CGPoint

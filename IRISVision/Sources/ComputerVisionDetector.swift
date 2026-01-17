@@ -2,11 +2,14 @@ import Foundation
 import CoreImage
 import CoreGraphics
 import AppKit
+import IRISCore
 
-class ComputerVisionDetector {
+public class ComputerVisionDetector {
+    public init() {}
+
     private let context = CIContext()
 
-    func detectRegions(in image: CGImage, around gazePoint: CGPoint) -> [DetectedElement] {
+    public func detectRegions(in image: CGImage, around gazePoint: CGPoint) -> [DetectedElement] {
         var detectedElements: [DetectedElement] = []
 
         // Analyze layout structure
@@ -26,7 +29,7 @@ class ComputerVisionDetector {
         return detectedElements
     }
 
-    func analyzeLayout(in image: CGImage) -> [CGRect]? {
+    public func analyzeLayout(in image: CGImage) -> [CGRect]? {
         let ciImage = CIImage(cgImage: image)
 
         // Apply edge detection
@@ -389,7 +392,7 @@ class ComputerVisionDetector {
 }
 
 extension CGRect {
-    func distance(to other: CGRect) -> CGFloat {
+    public func distance(to other: CGRect) -> CGFloat {
         if self.intersects(other) {
             return 0
         }

@@ -1,4 +1,6 @@
 import Foundation
+import IRISCore
+import IRISNetwork
 
 @MainActor
 class IntentResolver: ObservableObject {

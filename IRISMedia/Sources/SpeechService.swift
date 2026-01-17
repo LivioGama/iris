@@ -2,22 +2,22 @@ import Speech
 import AVFoundation
 
 @MainActor
-class SpeechService: ObservableObject {
+public class SpeechService: ObservableObject {
     private var recognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     
-    @Published var transcript = ""
-    @Published var isRecognizing = false
-    @Published var isFinal = false
+    @Published public var transcript = ""
+    @Published public var isRecognizing = false
+    @Published public var isFinal = false
     
-    var onTranscriptUpdate: ((String, Bool) -> Void)?
+    public var onTranscriptUpdate: ((String, Bool) -> Void)?
     
-    init() {
+    public init() {
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     }
     
-    func startRecognition() throws {
+    public func startRecognition() throws {
         guard let recognizer = recognizer, recognizer.isAvailable else {
             throw SpeechError.recognizerUnavailable
         }
@@ -56,11 +56,11 @@ class SpeechService: ObservableObject {
         }
     }
     
-    func appendBuffer(_ buffer: AVAudioPCMBuffer) {
+    public func appendBuffer(_ buffer: AVAudioPCMBuffer) {
         recognitionRequest?.append(buffer)
     }
     
-    func stopRecognition() {
+    public func stopRecognition() {
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -77,7 +77,7 @@ class SpeechService: ObservableObject {
     }
 }
 
-enum SpeechError: Error {
+public enum SpeechError: Error {
     case recognizerUnavailable
     case notAuthorized
 }

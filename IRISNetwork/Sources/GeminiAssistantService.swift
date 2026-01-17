@@ -1,8 +1,10 @@
 import Foundation
 import AppKit
 import Speech
+import IRISCore
+import IRISVision
 
-struct GeminiRequest: Codable {
+public struct GeminiRequest: Codable {
     struct Content: Codable {
         struct Part: Codable {
             let text: String?
@@ -19,7 +21,7 @@ struct GeminiRequest: Codable {
     let contents: [Content]
 }
 
-struct GeminiResponse: Codable {
+public struct GeminiResponse: Codable {
     struct Candidate: Codable {
         struct Content: Codable {
             struct Part: Codable {
@@ -32,13 +34,13 @@ struct GeminiResponse: Codable {
     let candidates: [Candidate]
 }
 
-class GeminiAssistantService: NSObject, ObservableObject {
-    @Published var isListening = false
-    @Published var transcribedText = ""
-    @Published var geminiResponse = "" // Kept for backward compatibility
-    @Published var chatMessages: [ChatMessage] = []
-    @Published var isProcessing = false
-    @Published var capturedScreenshot: NSImage?
+public class GeminiAssistantService: NSObject, ObservableObject {
+    @Published public var isListening = false
+    @Published public var transcribedText = ""
+    @Published public var geminiResponse = "" // Kept for backward compatibility
+    @Published public var chatMessages: [ChatMessage] = []
+    @Published public var isProcessing = false
+    @Published public var capturedScreenshot: NSImage?
 
     private let apiKey: String
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -66,7 +68,7 @@ class GeminiAssistantService: NSObject, ObservableObject {
     // Vision text detector for message extraction
     private let visionTextDetector = VisionTextDetector()
 
-    override init() {
+    public override init() {
         // Try to get API key from Keychain first, fallback to environment variable for backwards compatibility
         if let keychainKey = try? KeychainService.shared.getAPIKey() {
             self.apiKey = keychainKey
@@ -76,7 +78,7 @@ class GeminiAssistantService: NSObject, ObservableObject {
         super.init()
     }
 
-    func handleBlink(at point: CGPoint, focusedElement: DetectedElement?) {
+    public func handleBlink(at point: CGPoint, focusedElement: DetectedElement?) {
         // Prevent concurrent blink handling
         guard !isListening && !isProcessing else {
             print("⚠️ Already processing a blink, skipping (isListening: \(isListening), isProcessing: \(isProcessing))")
@@ -323,7 +325,7 @@ class GeminiAssistantService: NSObject, ObservableObject {
         recognitionRequest?.endAudio()
     }
 
-    func stopListening() {
+    public func stopListening() {
         // Public method to stop listening from UI
         silenceCheckTimer?.invalidate()
         silenceCheckTimer = nil
@@ -397,7 +399,7 @@ class GeminiAssistantService: NSObject, ObservableObject {
         }
     }
 
-    func sendTextOnlyToGemini(prompt: String) async {
+    public func sendTextOnlyToGemini(prompt: String) async {
         guard !apiKey.isEmpty else {
             await MainActor.run {
                 self.geminiResponse = "Error: GEMINI_API_KEY not set."

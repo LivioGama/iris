@@ -1,14 +1,16 @@
 import Foundation
 
-struct IntentResponse: Codable {
-    let target: String
-    let action: String
-    let reasoning: String
-    let confidence: Double
+public struct IntentResponse: Codable {
+    public let target: String
+    public let action: String
+    public let reasoning: String
+    public let confidence: Double
 }
 
-class GeminiService {
-    func resolveIntent(
+public class GeminiService {
+    public init() {}
+
+    public func resolveIntent(
         fullScreenBase64: String,
         croppedRegionBase64: String,
         transcript: String,

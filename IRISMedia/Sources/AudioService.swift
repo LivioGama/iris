@@ -1,23 +1,27 @@
 import AVFoundation
 
 @MainActor
-class AudioService: NSObject, ObservableObject {
+public class AudioService: NSObject, ObservableObject {
+    public override init() {
+        super.init()
+    }
+
     private var audioEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
     
-    @Published var isListening = false
-    @Published var voiceActivityDetected = false
-    @Published var audioLevel: Float = 0
+    @Published public var isListening = false
+    @Published public var voiceActivityDetected = false
+    @Published public var audioLevel: Float = 0
     
     private var silenceThreshold: Float = 0.01
     private var silenceFrameCount = 0
     private var maxSilenceFrames = 30
     
-    var onVoiceStart: (() -> Void)?
-    var onVoiceEnd: (() -> Void)?
-    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
+    public var onVoiceStart: (() -> Void)?
+    public var onVoiceEnd: (() -> Void)?
+    public var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
     
-    func start() async throws {
+    public func start() async throws {
         guard await checkPermission() else {
             throw AudioError.permissionDenied
         }
@@ -37,7 +41,7 @@ class AudioService: NSObject, ObservableObject {
         isListening = true
     }
     
-    func stop() {
+    public func stop() {
         inputNode?.removeTap(onBus: 0)
         audioEngine?.stop()
         isListening = false
@@ -86,6 +90,6 @@ class AudioService: NSObject, ObservableObject {
     }
 }
 
-enum AudioError: Error {
+public enum AudioError: Error {
     case permissionDenied
 }

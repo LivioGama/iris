@@ -3,16 +3,18 @@ import AppKit
 import CoreGraphics
 
 @MainActor
-class ScreenCaptureService: ObservableObject {
-    @Published var lastFullCapture: CGImage?
-    @Published var lastCroppedCapture: CGImage?
+public class ScreenCaptureService: ObservableObject {
+    public init() {}
+
+    @Published public var lastFullCapture: CGImage?
+    @Published public var lastCroppedCapture: CGImage?
 
     private var streamConfig: SCStreamConfiguration?
     private var filter: SCContentFilter?
 
-    var preferredScreen: NSScreen?
+    public var preferredScreen: NSScreen?
 
-    func captureFullScreen() async throws -> CGImage {
+    public func captureFullScreen() async throws -> CGImage {
         let content = try await SCShareableContent.current
 
         // Use preferred screen if available, otherwise fall back to first display
@@ -51,7 +53,7 @@ class ScreenCaptureService: ObservableObject {
         return image
     }
 
-    func captureScreen(at point: CGPoint) async throws -> CGImage {
+    public func captureScreen(at point: CGPoint) async throws -> CGImage {
         let content = try await SCShareableContent.current
 
         // Prefer the preferred screen if set, otherwise find by point
@@ -102,7 +104,7 @@ class ScreenCaptureService: ObservableObject {
         return image
     }
 
-    func captureCroppedRegion(around point: CGPoint, radius: CGFloat = 200) async throws -> CGImage {
+    public func captureCroppedRegion(around point: CGPoint, radius: CGFloat = 200) async throws -> CGImage {
         let fullImage = try await captureFullScreen()
 
         let rect = CGRect(
@@ -120,7 +122,7 @@ class ScreenCaptureService: ObservableObject {
         return croppedImage
     }
 
-    func imageToBase64(_ image: CGImage) -> String? {
+    public func imageToBase64(_ image: CGImage) -> String? {
         let bitmapRep = NSBitmapImageRep(cgImage: image)
         guard let data = bitmapRep.representation(using: .png, properties: [:]) else {
             return nil
@@ -129,7 +131,7 @@ class ScreenCaptureService: ObservableObject {
     }
 }
 
-enum ScreenCaptureError: Error {
+public enum ScreenCaptureError: Error {
     case noDisplay
     case croppingFailed
     case permissionDenied

@@ -1,29 +1,31 @@
 import Foundation
 import AppKit
 import Combine
+import IRISCore
+import IRISVision
 
-enum CalibrationCorner: String {
+public enum CalibrationCorner: String {
     case none, topLeft, topRight, bottomLeft, bottomRight, center, done
 }
 
-enum DominantEye: String {
+public enum DominantEye: String {
     case left, right
 }
 
-class GazeEstimator: ObservableObject {
-    @MainActor @Published var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
-    @MainActor @Published var isTracking = false
-    @MainActor @Published var debugInfo: String = "Starting..."
-    @MainActor @Published var calibrationCorner: CalibrationCorner = .none
-    @MainActor @Published var detectedElement: DetectedElement?
+public class GazeEstimator: ObservableObject {
+    @MainActor @Published public var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
+    @MainActor @Published public var isTracking = false
+    @MainActor @Published public var debugInfo: String = "Starting..."
+    @MainActor @Published public var calibrationCorner: CalibrationCorner = .none
+    @MainActor @Published public var detectedElement: DetectedElement?
 
-    var dominantEye: DominantEye = .left
-    var isTrackingEnabled: Bool = true
+    public var dominantEye: DominantEye = .left
+    public var isTrackingEnabled: Bool = true
 
-    var onHoverDetected: ((CGPoint) -> Void)?
-    var onGazeUpdate: ((CGPoint) -> Void)?
-    var onRealTimeDetection: ((DetectedElement) -> Void)?
-    var onBlinkDetected: ((CGPoint, DetectedElement?) -> Void)?
+    public var onHoverDetected: ((CGPoint) -> Void)?
+    public var onGazeUpdate: ((CGPoint) -> Void)?
+    public var onRealTimeDetection: ((DetectedElement) -> Void)?
+    public var onBlinkDetected: ((CGPoint, DetectedElement?) -> Void)?
 
     private let lock = NSLock()
     private var targetPoint: CGPoint = CGPoint(x: 960, y: 540)
@@ -49,7 +51,7 @@ class GazeEstimator: ObservableObject {
     private var hoverStartTime: Date?
     private var analysisInProgress = false
 
-    init() {
+    public init() {
         if let screen = NSScreen.main {
             let center = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
             targetPoint = center
@@ -253,7 +255,7 @@ class GazeEstimator: ObservableObject {
     }
 
 
-    func start() {
+    public func start() {
         guard process == nil else { return }
 
         let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
@@ -380,7 +382,7 @@ class GazeEstimator: ObservableObject {
         process = nil
     }
 
-    func stop() {
+    public func stop() {
         process?.terminate()
         process = nil
         Task { @MainActor in
@@ -389,7 +391,7 @@ class GazeEstimator: ObservableObject {
         }
     }
 
-    func processFrame(_ pixelBuffer: CVPixelBuffer) {
+    public func processFrame(_ pixelBuffer: CVPixelBuffer) {
     }
 
     deinit {

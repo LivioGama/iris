@@ -2,11 +2,12 @@ import Foundation
 import Vision
 import CoreGraphics
 import AppKit
+import IRISCore
 
-class VisionTextDetector {
+public class VisionTextDetector {
     private let textRecognitionRequest: VNRecognizeTextRequest
 
-    init() {
+    public init() {
         textRecognitionRequest = VNRecognizeTextRequest()
         textRecognitionRequest.recognitionLevel = .accurate
         textRecognitionRequest.usesLanguageCorrection = false
@@ -18,7 +19,7 @@ class VisionTextDetector {
     /// - Parameters:
     ///   - image: The image to extract messages from
     ///   - skipLeftSidebar: If true, ignores text in the left 35% of the image (useful for chat apps with contact lists)
-    func extractMessages(from image: CGImage, skipLeftSidebar: Bool = true) async -> [String] {
+    public func extractMessages(from image: CGImage, skipLeftSidebar: Bool = true) async -> [String] {
         print("📨 VisionTextDetector: Extracting messages from image (skipLeftSidebar: \(skipLeftSidebar))")
         let handler = VNImageRequestHandler(cgImage: image)
 
@@ -112,7 +113,7 @@ class VisionTextDetector {
         return messages
     }
 
-    func detectTextRegions(in image: CGImage, around gazePoint: CGPoint) async -> [DetectedElement] {
+    public func detectTextRegions(in image: CGImage, around gazePoint: CGPoint) async -> [DetectedElement] {
         print("🔤 Vision: Starting text detection on \(image.width)x\(image.height) image")
         let handler = VNImageRequestHandler(cgImage: image)
 
@@ -277,7 +278,7 @@ class VisionTextDetector {
         return standardDeviation / avgHeight < 0.1
     }
 
-    private func classifyType(from characteristics: TextCharacteristics) -> ElementType {
+    private func classifyType(from characteristics: TextCharacteristics) -> IRISCore.ElementType {
         if characteristics.lineCount == 1 && characteristics.averageHeight < 0.02 {
             return .inputField
         }
@@ -297,7 +298,7 @@ class VisionTextDetector {
         return .other
     }
 
-    private func calculateTextConfidence(_ characteristics: TextCharacteristics, type: ElementType) -> Double {
+    private func calculateTextConfidence(_ characteristics: TextCharacteristics, type: IRISCore.ElementType) -> Double {
         switch type {
         case .codeEditor:
             var confidence = 0.6
@@ -317,7 +318,7 @@ class VisionTextDetector {
         }
     }
 
-    private func createLabel(for type: ElementType, text: String) -> String {
+    private func createLabel(for type: IRISCore.ElementType, text: String) -> String {
         switch type {
         case .codeEditor:
             return "Code Editor"
@@ -331,11 +332,11 @@ class VisionTextDetector {
     }
 }
 
-struct TextCharacteristics {
-    let lineCount: Int
-    let averageHeight: CGFloat
-    let hasIndentation: Bool
-    let averageWordsPerLine: Double
-    let isUniformWidth: Bool
-    let hasCodePatterns: Bool
+public struct TextCharacteristics {
+    public let lineCount: Int
+    public let averageHeight: CGFloat
+    public let hasIndentation: Bool
+    public let averageWordsPerLine: Double
+    public let isUniformWidth: Bool
+    public let hasCodePatterns: Bool
 }

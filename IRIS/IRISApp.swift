@@ -137,11 +137,3 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("Microphone permission: \(micGranted)")
     }
 }
-
-struct ResolvedIntent: Identifiable {
-    let id = UUID()
-    let target: String
-    let action: String
-    let reasoning: String
-    let confidence: Double
-}

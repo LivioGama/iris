@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-enum KeychainError: Error {
+public enum KeychainError: Error {
     case failedToSave
     case failedToRetrieve
     case failedToDelete
@@ -10,8 +10,8 @@ enum KeychainError: Error {
     case unexpectedStatus(OSStatus)
 }
 
-class KeychainService {
-    static let shared = KeychainService()
+public class KeychainService {
+    public static let shared = KeychainService()
 
     private let service = "com.iris.gemini"
     private let account = "gemini-api-key"
@@ -19,7 +19,7 @@ class KeychainService {
     private init() {}
 
     /// Saves the API key securely to the Keychain
-    func saveAPIKey(_ apiKey: String) throws {
+    public func saveAPIKey(_ apiKey: String) throws {
         guard let data = apiKey.data(using: .utf8) else {
             throw KeychainError.invalidData
         }
@@ -43,7 +43,7 @@ class KeychainService {
     }
 
     /// Retrieves the API key from the Keychain
-    func getAPIKey() throws -> String {
+    public func getAPIKey() throws -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -71,7 +71,7 @@ class KeychainService {
     }
 
     /// Deletes the API key from the Keychain
-    func deleteAPIKey() throws {
+    public func deleteAPIKey() throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -86,7 +86,7 @@ class KeychainService {
     }
 
     /// Checks if API key exists in Keychain
-    func hasAPIKey() -> Bool {
+    public func hasAPIKey() -> Bool {
         do {
             _ = try getAPIKey()
             return true

@@ -1,4 +1,6 @@
 import SwiftUI
+import IRISCore
+import IRISNetwork
 
 struct GeminiResponseOverlay: View {
     @ObservedObject var geminiService: GeminiAssistantService
