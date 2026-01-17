@@ -1,0 +1,4 @@
+module IRISMedia {
+header "IRISMedia-Swift.h"
+export *
+}

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AVFoundation
 import IRISCore
 import IRISNetwork
 import IRISMedia
@@ -11,15 +12,18 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
     // MARK: - Published Properties
     @Published public var isListening = false
     @Published public var transcribedText = ""
+    @Published public var liveTranscription = "" // Real-time partial transcription
     @Published public var geminiResponse = "" // Kept for backward compatibility
+    @Published public var liveGeminiResponse = "" // Real-time streaming Gemini response
     @Published public var chatMessages: [ChatMessage] = []
     @Published public var isProcessing = false
     @Published public var capturedScreenshot: NSImage?
+    @Published public var remainingTimeout: TimeInterval? = nil
 
     // MARK: - Services
     private let geminiClient: GeminiClient
     private let conversationManager: ConversationManager
-    private let voiceInteractionService: VoiceInteractionService
+    internal let voiceInteractionService: VoiceInteractionService
     private let messageExtractionService: MessageExtractionService
     private let screenshotService: ScreenshotService
     private let sentimentAnalysisService = SentimentAnalysisService.shared
@@ -36,116 +40,222 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
     private var lastSentTime: Date?
     private let deduplicationWindow: TimeInterval = 5.0
 
+    // Countdown timer
+    private var countdownTimer: Timer?
+    private var timeoutStartTime: Date?
+
+    // Blink cooldown
+    private var lastBlinkTime: Date?
+    private let blinkCooldownPeriod: TimeInterval = 2.0  // 2 seconds cooldown
+
     // Prompts
     private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
 
     // MARK: - Initialization
-    public override init() {
-        // Get API key from Keychain or environment
-        let apiKey: String
-        if let keychainKey = try? KeychainService.shared.getAPIKey() {
-            apiKey = keychainKey
-        } else {
-            apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
-        }
+    public init(
+        geminiClient: GeminiClient,
+        conversationManager: ConversationManager,
+        voiceInteractionService: VoiceInteractionService,
+        messageExtractionService: MessageExtractionService,
+        screenshotService: ScreenshotService
+    ) {
+        self.geminiClient = geminiClient
+        self.conversationManager = conversationManager
+        self.voiceInteractionService = voiceInteractionService
+        self.messageExtractionService = messageExtractionService
+        self.screenshotService = screenshotService
 
-        self.geminiClient = GeminiClient(apiKey: apiKey)
-        self.conversationManager = ConversationManager(maxHistoryLength: 20)
-        self.voiceInteractionService = VoiceInteractionService()
-        self.messageExtractionService = MessageExtractionService()
-        self.screenshotService = ScreenshotService()
-
+        print("🔑 GeminiAssistantOrchestrator initialized with shared client")
         super.init()
     }
 
     // MARK: - Public API
+    public func prewarm() {
+        voiceInteractionService.prewarm()
+    }
+
     public func handleBlink(at point: CGPoint, focusedElement: DetectedElement?) {
+        // Ignore blinks when overlay is already open (has chat messages or screenshot)
+        guard chatMessages.isEmpty && capturedScreenshot == nil else {
+            print("⚠️ Overlay already open, ignoring blink")
+            return
+        }
+
         // Prevent concurrent blink handling
         guard !isListening && !isProcessing else {
             print("⚠️ Already processing a blink, skipping")
             return
         }
 
+        // Cooldown check - prevent rapid re-triggering
+        if let lastBlink = lastBlinkTime, Date().timeIntervalSince(lastBlink) < blinkCooldownPeriod {
+            print("⚠️ Blink cooldown active, skipping")
+            return
+        }
+
+        lastBlinkTime = Date()
         print("🔵 Blink detected at \(point)")
 
         // Capture screenshot with error handling
         guard let screenshot = screenshotService.captureCurrentScreen() else {
             print("❌ Failed to capture screenshot")
-            DispatchQueue.main.async {
-                self.isProcessing = false
-                self.isListening = false
-            }
+            self.isProcessing = false
+            self.isListening = false
             return
         }
 
         // Store screenshot and focused element
-        DispatchQueue.main.async {
-            self.capturedScreenshot = screenshot
-            self.currentFocusedElement = focusedElement
-        }
+        self.capturedScreenshot = screenshot
+        self.currentFocusedElement = focusedElement
 
         // Reset conversation for new interaction
         conversationManager.clearHistory()
 
         // Clear chat messages
-        DispatchQueue.main.async {
-            self.chatMessages.removeAll()
-        }
+        self.chatMessages.removeAll()
 
-        // Start voice interaction with 12-second timeout
-        DispatchQueue.main.async {
-            self.isListening = true
-        }
+        // Start voice interaction with 5-second timeout
+        let timeoutDuration: TimeInterval = 5.0
 
-        voiceInteractionService.startListening(timeout: 12.0) { [weak self] prompt in
+        // Update UI state on main thread BEFORE starting timer
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            print("📥 Voice callback received: '\(prompt)'")
+            self.remainingTimeout = timeoutDuration
+            self.timeoutStartTime = Date()
+            print("⏱️ Starting countdown timer with timeout: \(timeoutDuration)s")
+            self.startCountdownTimer(totalTimeout: timeoutDuration)
+            print("⏱️ Timer started, continuing...")
+        }
 
+        voiceInteractionService.startListening(timeout: timeoutDuration, useExternalAudio: true, onSpeechDetected: { [weak self] in
+            print("🎤 Speech detected! Stopping countdown...")
+            // Stop countdown when speech is detected
             DispatchQueue.main.async {
-                self.isListening = false
-                self.transcribedText = prompt
+                // Now mark as listening since speech was actually detected
+                self?.isListening = true
+                self?.isListeningForBuffers = true
+                self?.bufferCount = 0
+                print("🎤 Set isListening and isListeningForBuffers = true after speech detected")
+
+                self?.countdownTimer?.invalidate()
+                self?.countdownTimer = nil
+                self?.remainingTimeout = nil
+
+                // Add placeholder user message bubble immediately
+                self?.chatMessages.append(ChatMessage(role: .user, content: "...", timestamp: Date()))
+            }
+        }, onPartialResult: { [weak self] partialText in
+            // Update live transcription in real-time
+            DispatchQueue.main.async {
+                self?.liveTranscription = partialText
+            }
+        }) { [weak self] prompt in
+            print("📥📥📥 VOICE CALLBACK FIRED - Prompt: '\(prompt)' (length: \(prompt.count))")
+
+            guard let self = self else {
+                print("⚠️ Voice callback: self is nil")
+                return
             }
 
-            print("🎤 Prompt received: \(prompt)")
+            // Stop countdown timer when user finishes speaking
+            print("⏱️ Stopping countdown timer")
+            DispatchQueue.main.async {
+                self.countdownTimer?.invalidate()
+                self.countdownTimer = nil
+                self.timeoutStartTime = nil
+                self.remainingTimeout = nil
+            }
+
+            print("🔄 Setting isListening = false, isListeningForBuffers = false")
+            DispatchQueue.main.async {
+                self.isListening = false
+                self.isListeningForBuffers = false
+                self.transcribedText = prompt
+                self.liveTranscription = "" // Clear live transcription
+
+                // Replace the loading bubble with actual transcription
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(role: .user, content: prompt, timestamp: Date())
+                }
+            }
 
             // Check for "stop" command to exit analysis mode
-            let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if normalizedPrompt == "stop" {
-                print("🛑 Stop command detected, returning to indicator mode")
+            print("🔍 Checking if stop command...")
+            if self.isStopCommand(prompt) {
+                print("🛑🛑🛑 Stop command detected, returning to indicator mode")
                 DispatchQueue.main.async {
                     self.capturedScreenshot = nil
                     self.isProcessing = false
+                    self.isListening = false
                     self.chatMessages.removeAll()
                 }
                 return
             }
 
             // Only process if there's actual input
+            print("🔍 Checking if prompt is empty...")
             guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                print("⚠️ No voice input detected")
+                print("⚠️⚠️⚠️ No voice input detected (empty prompt) - CLOSING OVERLAY")
                 DispatchQueue.main.async {
                     self.capturedScreenshot = nil
                     self.isProcessing = false
+                    self.isListening = false
+                    self.chatMessages.removeAll()
                 }
                 return
             }
 
             // Send to Gemini
-            Task {
+            print("✅✅✅ Valid prompt received, sending to Gemini with screenshot")
+            Task { @MainActor in
                 await self.sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: focusedElement)
             }
         }
     }
 
+    // Use an atomic or non-isolated flag for the audio thread to check without actor hop
+    private var isListeningForBuffers = false
+
+    private var bufferCount = 0
+    public func receiveAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        // Optimized check: no actor hop for every buffer
+        if isListeningForBuffers {
+            bufferCount += 1
+            if bufferCount % 100 == 0 {
+                print("🎤 Received \(bufferCount) audio buffers")
+            }
+            voiceInteractionService.receiveBuffer(buffer)
+        }
+    }
+
     public func stopListening() {
+        self.isListening = false
+        self.isListeningForBuffers = false
         voiceInteractionService.stopListening()
 
+        // Update blink time to prevent immediate re-opening
+        self.lastBlinkTime = Date()
+        print("🛑 Updated lastBlinkTime to prevent immediate re-opening")
+
         DispatchQueue.main.async {
-            print("🛑 stopListening: Setting isListening = false, isProcessing = false")
+            print("🛑 stopListening: Clearing listening state and UI")
+
+            // Stop countdown timer directly (no nested async)
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
+            self.timeoutStartTime = nil
+            self.remainingTimeout = nil
+
             self.isListening = false
             self.transcribedText = ""
-            self.isProcessing = false
+            self.capturedScreenshot = nil
+            self.chatMessages.removeAll()
+
+            // Only clear isProcessing if we're not actually processing a Gemini request
+            if !self.isProcessing {
+                self.geminiResponse = ""
+            }
         }
 
         print("🛑 Listening stopped, ready for new blink")
@@ -153,22 +263,34 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
     // MARK: - Private Methods
     private func sendToGemini(screenshot: NSImage, prompt: String, focusedElement: DetectedElement?) async {
+        print("📤 sendToGemini called with prompt: '\(prompt)'")
+
         // Check for duplicate prompts
         let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalizedPrompt == lastSentPrompt.lowercased(),
            let lastTime = lastSentTime,
            Date().timeIntervalSince(lastTime) < deduplicationWindow {
-            print("⚠️ Duplicate prompt detected, skipping")
+            print("⚠️ Duplicate prompt detected, skipping (last: '\(lastSentPrompt)', current: '\(normalizedPrompt)', time diff: \(Date().timeIntervalSince(lastTime))s)")
+            await MainActor.run {
+                self.isProcessing = false
+            }
             return
         }
 
+        print("✅ Not a duplicate - last: '\(lastSentPrompt)', current: '\(normalizedPrompt)'")
         lastSentPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         lastSentTime = Date()
 
+        print("✅ Setting isProcessing = true and adding messages")
         await MainActor.run {
             self.isProcessing = true
-            self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
+            // Don't add user message here - it's already been added and replaced from loading bubble
+
+            // Add assistant loading bubble immediately
+            self.chatMessages.append(ChatMessage(role: .assistant, content: "...", timestamp: Date()))
         }
+
+        print("✅ isProcessing set, continuing...")
 
         // Handle message selection flow
         var actualPrompt = prompt
@@ -216,12 +338,29 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         let request = GeminiRequest(contents: conversationManager.getHistory())
 
-        // Send request
+        // Send streaming request
+        print("🌐 About to send Gemini API streaming request...")
         do {
-            let response = try await geminiClient.sendRequest(request)
+            print("🌐 Calling geminiClient.sendStreamingRequest...")
 
-            guard let responseText = response.candidates.first?.content.parts.first?.text else {
-                throw GeminiError.noResponse
+            // Clear previous live response
+            await MainActor.run {
+                self.liveGeminiResponse = ""
+            }
+
+            let responseText = try await geminiClient.sendStreamingRequest(request) { [weak self] partialText in
+                // Update live Gemini response in real-time
+                Task { @MainActor in
+                    self?.liveGeminiResponse = partialText
+                }
+            }
+
+            print("🌐 Received complete response from Gemini!")
+            print("✅ Got response text: \(responseText.prefix(100))...")
+
+            // Clear live response now that we have the final version
+            await MainActor.run {
+                self.liveGeminiResponse = ""
             }
 
             // Add response to history
@@ -233,17 +372,30 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
             // Handle message extraction flow
             if waitingForMessageExtraction {
+                print("📤 Handling message extraction...")
                 await handleMessageExtraction(responseText: responseText)
             } else {
+                print("💬 Handling normal response...")
                 await handleNormalResponse(responseText: responseText)
             }
 
         } catch {
+            print("❌❌❌ Request failed with error: \(error)")
+            print("❌ Error type: \(type(of: error))")
+            print("❌ Error description: \(error.localizedDescription)")
+
+            // Provide helpful error message
+            let errorMessage: String
+            if let geminiError = error as? GeminiError, case .missingAPIKey = geminiError {
+                errorMessage = "API Key not configured. Please set your Gemini API key in the menu bar settings."
+            } else {
+                errorMessage = "Error: \(error.localizedDescription)"
+            }
+
             await MainActor.run {
-                self.geminiResponse = "Error: \(error.localizedDescription)"
+                self.geminiResponse = errorMessage
                 self.isProcessing = false
             }
-            print("❌ Request failed: \(error)")
         }
     }
 
@@ -262,7 +414,14 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         await MainActor.run {
             self.isProcessing = true
-            self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
+            // Don't add user message here - it's already been added and replaced from loading bubble in follow-up flow
+            // Only add it if it's not already there (for direct calls)
+            if !self.chatMessages.contains(where: { $0.role == .user && $0.content == prompt }) {
+                self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
+            }
+
+            // Add assistant loading bubble immediately
+            self.chatMessages.append(ChatMessage(role: .assistant, content: "...", timestamp: Date()))
         }
 
         // Handle message selection
@@ -291,10 +450,21 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         let request = GeminiRequest(contents: conversationManager.getHistory())
 
         do {
-            let response = try await geminiClient.sendRequest(request)
+            // Clear previous live response
+            await MainActor.run {
+                self.liveGeminiResponse = ""
+            }
 
-            guard let responseText = response.candidates.first?.content.parts.first?.text else {
-                throw GeminiError.noResponse
+            let responseText = try await geminiClient.sendStreamingRequest(request) { [weak self] partialText in
+                // Update live Gemini response in real-time
+                Task { @MainActor in
+                    self?.liveGeminiResponse = partialText
+                }
+            }
+
+            // Clear live response now that we have the final version
+            await MainActor.run {
+                self.liveGeminiResponse = ""
             }
 
             let assistantMessage = GeminiRequest.Content(
@@ -310,14 +480,51 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             }
 
         } catch {
+            // Provide helpful error message
+            let errorMessage: String
+            if let geminiError = error as? GeminiError, case .missingAPIKey = geminiError {
+                errorMessage = "API Key not configured. Please set your Gemini API key in the menu bar settings."
+            } else {
+                errorMessage = "Error: \(error.localizedDescription)"
+            }
+
             await MainActor.run {
-                self.geminiResponse = "Error: \(error.localizedDescription)"
+                self.geminiResponse = errorMessage
                 self.isProcessing = false
             }
         }
     }
 
     // MARK: - Helper Methods
+
+    /// Detects stop commands using local keyword matching (no API call needed)
+    private func isStopCommand(_ text: String) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // List of stop command keywords and phrases
+        let stopKeywords = [
+            "stop",
+            "cancel",
+            "exit",
+            "quit",
+            "close",
+            "nevermind",
+            "never mind",
+            "forget it",
+            "no thanks",
+            "dismiss"
+        ]
+
+        // Check for exact matches or if the text starts with any of these keywords
+        for keyword in stopKeywords {
+            if normalized == keyword || normalized.hasPrefix(keyword + " ") {
+                return true
+            }
+        }
+
+        return false
+    }
+
     private func buildPrompt(actualPrompt: String, focusedElement: DetectedElement?) -> String {
         var fullPrompt = "You are an AI assistant helping a user who is using eye-tracking and voice control."
 
@@ -427,11 +634,20 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         if messages.isEmpty {
             await MainActor.run {
-                self.chatMessages.append(ChatMessage(
-                    role: .assistant,
-                    content: "I couldn't detect any numbered messages in the chat. The response was:\n\(responseText)",
-                    timestamp: Date()
-                ))
+                // Replace the assistant loading bubble with error message
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(
+                        role: .assistant,
+                        content: "I couldn't detect any numbered messages in the chat. The response was:\n\(responseText)",
+                        timestamp: Date()
+                    )
+                } else {
+                    self.chatMessages.append(ChatMessage(
+                        role: .assistant,
+                        content: "I couldn't detect any numbered messages in the chat. The response was:\n\(responseText)",
+                        timestamp: Date()
+                    ))
+                }
                 self.isProcessing = false
             }
             startListeningForFollowup()
@@ -442,11 +658,20 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             let messageList = messageExtractionService.formatMessageList(messages)
 
             await MainActor.run {
-                self.chatMessages.append(ChatMessage(
-                    role: .assistant,
-                    content: "I found \(messages.count) message(s):\n\n\(messageList)\n\nWhich message number would you like me to analyze?",
-                    timestamp: Date()
-                ))
+                // Replace the assistant loading bubble with message list
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(
+                        role: .assistant,
+                        content: "I found \(messages.count) message(s):\n\n\(messageList)\n\nWhich message number would you like me to analyze?",
+                        timestamp: Date()
+                    )
+                } else {
+                    self.chatMessages.append(ChatMessage(
+                        role: .assistant,
+                        content: "I found \(messages.count) message(s):\n\n\(messageList)\n\nWhich message number would you like me to analyze?",
+                        timestamp: Date()
+                    ))
+                }
                 self.isProcessing = false
             }
 
@@ -458,7 +683,14 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         await MainActor.run {
             self.geminiResponse = responseText
             self.isProcessing = false
-            self.chatMessages.append(ChatMessage(role: .assistant, content: responseText, timestamp: Date()))
+
+            // Replace the assistant loading bubble with actual response
+            if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: responseText, timestamp: Date())
+            } else {
+                // Fallback: add new message if loading bubble not found
+                self.chatMessages.append(ChatMessage(role: .assistant, content: responseText, timestamp: Date()))
+            }
         }
 
         print("✅ Gemini response received")
@@ -466,16 +698,22 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
     }
 
     private func startListeningForFollowup() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+
+            // Only listen if overlay is actually open with a screenshot
+            guard self.capturedScreenshot != nil else {
+                print("⚠️ No screenshot, not starting follow-up listener")
+                return
+            }
 
             guard !self.chatMessages.isEmpty else {
                 print("⚠️ Chat closed, not starting follow-up listener")
                 return
             }
 
-            guard !self.isListening && !self.isProcessing else {
-                print("⚠️ Already listening or processing")
+            guard !self.isListening else {
+                print("⚠️ Already listening")
                 return
             }
 
@@ -483,18 +721,38 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
             DispatchQueue.main.async {
                 self.isListening = true
+                self.isListeningForBuffers = true
+                self.bufferCount = 0
+                print("🎤 Set isListeningForBuffers = true for follow-up")
+                // No timeout for follow-up questions
+                self.remainingTimeout = nil
             }
 
-            self.voiceInteractionService.startListening(timeout: nil) { [weak self] followupPrompt in
+            self.voiceInteractionService.startListening(timeout: nil, useExternalAudio: true, onSpeechDetected: { [weak self] in
+                DispatchQueue.main.async {
+                    // Add placeholder user message bubble immediately on speech detection
+                    self?.chatMessages.append(ChatMessage(role: .user, content: "...", timestamp: Date()))
+                }
+            }, onPartialResult: { [weak self] partialText in
+                // Update live transcription in real-time
+                DispatchQueue.main.async {
+                    self?.liveTranscription = partialText
+                }
+            }) { [weak self] followupPrompt in
                 guard let self = self else { return }
 
                 DispatchQueue.main.async {
                     self.isListening = false
+                    self.liveTranscription = "" // Clear live transcription
+
+                    // Replace the loading bubble with actual transcription
+                    if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
+                        self.chatMessages[lastIndex] = ChatMessage(role: .user, content: followupPrompt, timestamp: Date())
+                    }
                 }
 
-                // Check for "stop" command
-                let normalizedFollowup = followupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if normalizedFollowup == "stop" {
+                // Check for "stop" command (local keyword matching)
+                if self.isStopCommand(followupPrompt) {
                     print("🛑 Stop command detected, returning to indicator mode")
                     DispatchQueue.main.async {
                         self.capturedScreenshot = nil
@@ -516,6 +774,48 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                     await self.sendTextOnlyToGemini(prompt: followupPrompt)
                 }
             }
+        }
+    }
+
+    // MARK: - Countdown Timer
+
+    private func startCountdownTimer(totalTimeout: TimeInterval) {
+        // This is called from main thread already, so no need for async
+        print("⏱️ Creating countdown timer for \(totalTimeout)s")
+
+        // Stop any existing timer
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+
+        // Update countdown every 0.1 seconds for smooth updates
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  let startTime = self.timeoutStartTime else {
+                return
+            }
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            let remaining = max(0, totalTimeout - elapsed)
+
+            self.remainingTimeout = remaining
+
+            // Stop timer when countdown reaches zero
+            if remaining <= 0 {
+                self.countdownTimer?.invalidate()
+                self.countdownTimer = nil
+                self.remainingTimeout = nil
+            }
+        }
+
+        print("⏱️ Timer created and scheduled, initial remainingTimeout: \(String(describing: remainingTimeout))")
+    }
+
+    private func stopCountdownTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.countdownTimer?.invalidate()
+            self?.countdownTimer = nil
+            self?.timeoutStartTime = nil
+            self?.remainingTimeout = nil
         }
     }
 }

@@ -2,6 +2,8 @@ import SwiftUI
 import AVFoundation
 import Speech
 import Combine
+import IRISGaze
+import IRISCore
 
 @main
 struct IRISApp: App {
@@ -26,11 +28,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentMouseScreen: NSScreen?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        startAppServices()
+    }
+
+    private func startAppServices() {
+        // Cleanup any orphaned processes from previous crashes
+        cleanupOrphanedProcesses()
+
         // Setup signal handlers to cleanup Python processes on crash
         setupSignalHandlers()
 
+        // Register atexit handler as last resort
+        atexit {
+            AppDelegate.emergencyCleanup()
+        }
+
         Task {
             await requestAllPermissions()
+
+            // Only setup overlays and tracking if we have an API key
             setupOverlayWindows()
             setupMouseEventObserver()
             setupMouseTracking()
@@ -39,45 +55,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+
+
     func applicationWillTerminate(_ notification: Notification) {
         // Ensure Python processes are stopped
         print("🛑 App terminating, cleaning up...")
         coordinator.stop()
-        cleanupOrphanedPythonProcesses()
+        cleanupOrphanedProcesses()
     }
 
     private func setupSignalHandlers() {
         // Handle crashes and forced terminations
         signal(SIGTERM) { _ in
             print("🛑 SIGTERM received, cleaning up...")
-            Task { @MainActor in
-                AppDelegate.cleanup()
-            }
+            AppDelegate.emergencyCleanup()
             exit(0)
         }
 
         signal(SIGINT) { _ in
             print("🛑 SIGINT received, cleaning up...")
-            Task { @MainActor in
-                AppDelegate.cleanup()
-            }
+            AppDelegate.emergencyCleanup()
             exit(0)
+        }
+
+        signal(SIGABRT) { _ in
+            print("🛑 SIGABRT received, cleaning up...")
+            AppDelegate.emergencyCleanup()
+            exit(134)
+        }
+
+        signal(SIGSEGV) { _ in
+            print("🛑 SIGSEGV received, cleaning up...")
+            AppDelegate.emergencyCleanup()
+            exit(139)
         }
     }
 
-    private static func cleanup() {
-        // Kill all eye_tracker.py processes
+    static func emergencyCleanup() {
+        // This is called from signal handlers and atexit
+        // Must be async-signal-safe operations only
+
+        // Try to read PID file and kill process directly
+        let pidFilePath = NSTemporaryDirectory() + "iris_eye_tracker.pid"
+        if let pidString = try? String(contentsOfFile: pidFilePath, encoding: .utf8),
+           let pid = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            kill(pid, SIGKILL)
+        }
+
+        // Fallback: kill all eye_tracker.py processes
         let task = Process()
         task.launchPath = "/usr/bin/pkill"
-        task.arguments = ["-f", "eye_tracker.py"]
+        task.arguments = ["-9", "-f", "eye_tracker.py"]
         try? task.run()
         task.waitUntilExit()
     }
 
-    private func cleanupOrphanedPythonProcesses() {
+    private func cleanupOrphanedProcesses() {
+        // Import the cleanup function
+        IRISGaze.PythonProcessManager.cleanupOrphanedProcesses()
+
+        // Additional fallback cleanup
         let task = Process()
         task.launchPath = "/usr/bin/pkill"
-        task.arguments = ["-f", "eye_tracker.py"]
+        task.arguments = ["-9", "-f", "eye_tracker.py"]
         try? task.run()
         task.waitUntilExit()
     }

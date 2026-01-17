@@ -1,0 +1,59 @@
+{
+  "" : {
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/IRISNetwork-primary.dia",
+    "emit-module-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/IRISNetwork-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/IRISNetwork-primary-emit-module.dia",
+    "pch" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/IRISNetwork-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/IRISNetwork-primary.swiftdeps"
+  },
+  "/Users/livio/Documents/iris2/IRISNetwork/Sources/Gemini/ConversationManager.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/ConversationManager~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISNetwork/Sources/Gemini/GeminiClient.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/GeminiClient~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISNetwork/Sources/Gemini/MessageExtractionService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/MessageExtractionService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISNetwork/Sources/Gemini/PromptBuilder.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/PromptBuilder~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISNetwork/Sources/Sentiment/SentimentAnalysisService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISNetwork.build/Objects-normal/arm64/SentimentAnalysisService~partial.swiftmodule"
+  }
+}

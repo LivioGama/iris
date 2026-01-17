@@ -1,0 +1,4 @@
+module IRISCore {
+header "IRISCore-Swift.h"
+export *
+}

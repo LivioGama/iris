@@ -171,7 +171,7 @@ public enum IRISError: Error {
         case .geminiInvalidResponse:
             return .retry
         case .geminiRateLimitExceeded:
-            return .none
+            return RecoveryAction.none
         case .geminiAuthenticationFailed:
             return .checkAPIKey
 
@@ -179,7 +179,7 @@ public enum IRISError: Error {
         case .accessibilityNotEnabled:
             return .checkAccessibility
         case .accessibilityElementNotFound:
-            return .none
+            return RecoveryAction.none
         case .accessibilityPermissionDenied:
             return .checkAccessibility
 
@@ -187,7 +187,7 @@ public enum IRISError: Error {
         case .configurationMissing:
             return .checkAPIKey
         case .invalidConfiguration:
-            return .none
+            return RecoveryAction.none
 
         // Media Errors
         case .screenCaptureError:
@@ -207,11 +207,11 @@ public enum IRISError: Error {
         case .gazeCalibrationFailed:
             return .retry
         case .gazeTrackingLost:
-            return .none
+            return RecoveryAction.none
 
         // General Errors
         case .invalidInput:
-            return .none
+            return RecoveryAction.none
         case .serviceNotInitialized:
             return .restart
         case .operationTimeout:

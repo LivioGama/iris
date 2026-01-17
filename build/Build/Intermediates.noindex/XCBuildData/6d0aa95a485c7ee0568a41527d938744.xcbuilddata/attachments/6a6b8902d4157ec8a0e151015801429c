@@ -1,0 +1,4 @@
+module IRISGaze {
+header "IRISGaze-Swift.h"
+export *
+}

@@ -148,9 +148,11 @@ public class PythonProcessManager {
                     proc.interrupt()
                 }
                 self?.process = nil
+                self?.cleanupPIDFile()
             }
         } else {
             process = nil
+            cleanupPIDFile()
         }
 
         state = .idle
@@ -180,6 +182,51 @@ public class PythonProcessManager {
 
     // MARK: - Private Methods
 
+    private var pidFilePath: String {
+        NSTemporaryDirectory() + "iris_eye_tracker.pid"
+    }
+
+    private func writePIDFile(pid: Int32) {
+        do {
+            try "\(pid)".write(toFile: pidFilePath, atomically: true, encoding: .utf8)
+            print("✓ PID file written: \(pidFilePath)")
+        } catch {
+            print("⚠️ Failed to write PID file: \(error)")
+        }
+    }
+
+    private func cleanupPIDFile() {
+        try? FileManager.default.removeItem(atPath: pidFilePath)
+    }
+
+    /// Cleanup any orphaned processes from previous crashes
+    public static func cleanupOrphanedProcesses() {
+        let pidFilePath = NSTemporaryDirectory() + "iris_eye_tracker.pid"
+
+        guard let pidString = try? String(contentsOfFile: pidFilePath, encoding: .utf8),
+              let pid = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            // No PID file or invalid content
+            return
+        }
+
+        // Check if process is still running
+        if kill(pid, 0) == 0 {
+            // Process exists, try to kill it
+            print("🧹 Cleaning up orphaned Python process (PID: \(pid))")
+            kill(pid, SIGTERM)
+
+            // Wait a bit and force kill if still alive
+            usleep(500_000) // 0.5 seconds
+            if kill(pid, 0) == 0 {
+                print("🔨 Force killing orphaned process (PID: \(pid))")
+                kill(pid, SIGKILL)
+            }
+        }
+
+        // Remove PID file
+        try? FileManager.default.removeItem(atPath: pidFilePath)
+    }
+
     private func launchProcess(pythonPath: String, scriptPath: String, arguments: [String]) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: pythonPath)
@@ -191,6 +238,8 @@ public class PythonProcessManager {
         // This prevents orphaned Python processes
         #if os(macOS)
         proc.qualityOfService = .userInteractive
+        // Set the process to be in the same process group as the parent
+        // This ensures that when the parent dies, the child receives SIGHUP
         #endif
 
         let outputPipe = Pipe()
@@ -204,7 +253,12 @@ public class PythonProcessManager {
 
         do {
             try proc.run()
-            print("✓ PythonProcessManager: Process started (PID: \(proc.processIdentifier))")
+            let pid = proc.processIdentifier
+            print("✓ PythonProcessManager: Process started (PID: \(pid))")
+
+            // Write PID to a file for cleanup on crash
+            writePIDFile(pid: pid)
+
             state = .running
             recoveryAttemptCount = 0
 

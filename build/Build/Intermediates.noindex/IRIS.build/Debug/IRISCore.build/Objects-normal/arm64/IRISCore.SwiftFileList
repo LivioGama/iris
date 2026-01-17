@@ -1,0 +1,8 @@
+/Users/livio/Documents/iris2/IRISCore/Sources/Environment/PathResolver.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Extensions/String+Extensions.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Models/ChatMessage.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Models/DetectedElement.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Models/IRISError.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Models/ResolvedIntent.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Protocols/ServiceProtocols.swift
+/Users/livio/Documents/iris2/IRISCore/Sources/Security/KeychainService.swift

@@ -1,0 +1,28 @@
+Target dependency graph (10 targets)
+Target 'IRIS' in project 'IRIS'
+➜ Explicit dependency on target 'IRIS_IRIS' in project 'IRIS'
+➜ Explicit dependency on target 'IRISCore' in project 'IRIS'
+➜ Explicit dependency on target 'IRISVision' in project 'IRIS'
+➜ Explicit dependency on target 'IRISGaze' in project 'IRIS'
+➜ Explicit dependency on target 'IRISNetwork' in project 'IRIS'
+➜ Explicit dependency on target 'IRISMedia' in project 'IRIS'
+➜ Explicit dependency on target 'Atomics' in project 'swift-atomics'
+Target 'IRISMedia' in project 'IRIS'
+➜ Explicit dependency on target 'IRISCore' in project 'IRIS'
+Target 'IRISNetwork' in project 'IRIS'
+➜ Explicit dependency on target 'IRISCore' in project 'IRIS'
+➜ Explicit dependency on target 'IRISVision' in project 'IRIS'
+Target 'IRISGaze' in project 'IRIS'
+➜ Explicit dependency on target 'IRISCore' in project 'IRIS'
+➜ Explicit dependency on target 'IRISVision' in project 'IRIS'
+➜ Explicit dependency on target 'Atomics' in project 'swift-atomics'
+Target 'Atomics' in project 'swift-atomics'
+➜ Explicit dependency on target 'Atomics' in project 'swift-atomics'
+➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+Target 'Atomics' in project 'swift-atomics'
+➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+Target '_AtomicsShims' in project 'swift-atomics' (no dependencies)
+Target 'IRISVision' in project 'IRIS'
+➜ Explicit dependency on target 'IRISCore' in project 'IRIS'
+Target 'IRISCore' in project 'IRIS' (no dependencies)
+Target 'IRIS_IRIS' in project 'IRIS' (no dependencies)

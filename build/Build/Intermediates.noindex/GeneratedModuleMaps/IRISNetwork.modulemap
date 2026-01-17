@@ -1,0 +1,4 @@
+module IRISNetwork {
+header "IRISNetwork-Swift.h"
+export *
+}

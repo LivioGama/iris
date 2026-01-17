@@ -1,0 +1,4 @@
+module IRISVision {
+header "IRISVision-Swift.h"
+export *
+}

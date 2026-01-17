@@ -1,0 +1,69 @@
+{
+  "" : {
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/IRISMedia-primary.dia",
+    "emit-module-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/IRISMedia-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/IRISMedia-primary-emit-module.dia",
+    "pch" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/IRISMedia-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/IRISMedia-primary.swiftdeps"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/Audio/AudioService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/AudioService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/Camera/CameraService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/CameraService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/ScreenCapture/ScreenCaptureService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenCaptureService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/ScreenCapture/ScreenshotService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/ScreenshotService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/Speech/SpeechService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/SpeechService~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISMedia/Sources/Speech/VoiceInteractionService.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISMedia.build/Objects-normal/arm64/VoiceInteractionService~partial.swiftmodule"
+  }
+}

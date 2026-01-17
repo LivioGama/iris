@@ -1,6 +1,7 @@
 import SwiftUI
 import IRISCore
 import IRISGaze
+import IRISNetwork
 
 struct OverlayView: View {
     @EnvironmentObject var coordinator: IRISCoordinator
@@ -9,7 +10,12 @@ struct OverlayView: View {
         ZStack {
             Color.clear
 
-            if coordinator.gazeEstimator.isTrackingEnabled {
+            // Hide indicator when Gemini overlay is active
+            let isGeminiActive = coordinator.geminiAssistant.isListening ||
+                                coordinator.geminiAssistant.isProcessing ||
+                                !coordinator.geminiAssistant.chatMessages.isEmpty
+
+            if coordinator.gazeEstimator.isTrackingEnabled && !isGeminiActive {
                 ContextualGazeIndicator(
                     gazePoint: coordinator.gazeEstimator.gazePoint,
                     detectedElement: coordinator.gazeEstimator.detectedElement
@@ -202,12 +208,6 @@ struct DebugMini: View {
 
             Text("State: \(String(describing: coordinator.currentState))")
                 .font(.system(size: 10, design: .monospaced))
-
-            if !coordinator.speechService.transcript.isEmpty {
-                Text("Voice: \(coordinator.speechService.transcript)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .lineLimit(1)
-            }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.7)))

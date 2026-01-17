@@ -22,31 +22,46 @@ public class AudioService: NSObject, ObservableObject {
     public var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
     
     public func start() async throws {
+        print("🎤 AudioService: Starting...")
         guard await checkPermission() else {
+            print("❌ AudioService: Permission denied")
             throw AudioError.permissionDenied
         }
         
+        print("🎤 AudioService: Creating engine...")
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        print("🎤 AudioService: Input format: \(format)")
         
+        print("🎤 AudioService: Installing tap...")
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.processBuffer(buffer)
         }
         
+        print("🎤 AudioService: Starting engine...")
         try engine.start()
         
         self.audioEngine = engine
         self.inputNode = inputNode
         isListening = true
+        print("✅ AudioService: Started successfully")
     }
     
     public func stop() {
+        print("🔇 AudioService: Stopping engine and removing tap")
         inputNode?.removeTap(onBus: 0)
         audioEngine?.stop()
+        inputNode = nil
+        audioEngine = nil
         isListening = false
+        voiceActivityDetected = false
+        isVoiceActiveInternal = false
+        silenceFrameCount = 0
     }
     
+    private var isVoiceActiveInternal = false
+
     private func processBuffer(_ buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frameLength = Int(buffer.frameLength)
@@ -57,25 +72,39 @@ public class AudioService: NSObject, ObservableObject {
         }
         let level = sum / Float(frameLength)
         
-        Task { @MainActor in
-            self.audioLevel = level
-            
-            if level > self.silenceThreshold {
-                if !self.voiceActivityDetected {
-                    self.voiceActivityDetected = true
-                    self.onVoiceStart?()
-                }
-                self.silenceFrameCount = 0
-            } else if self.voiceActivityDetected {
-                self.silenceFrameCount += 1
-                if self.silenceFrameCount > self.maxSilenceFrames {
-                    self.voiceActivityDetected = false
-                    self.onVoiceEnd?()
-                }
+        // Detect voice activity change on this thread
+        var voiceStarted = false
+        var voiceEnded = false
+        
+        if level > self.silenceThreshold {
+            if !self.isVoiceActiveInternal {
+                self.isVoiceActiveInternal = true
+                voiceStarted = true
+            }
+            self.silenceFrameCount = 0
+        } else if self.isVoiceActiveInternal {
+            self.silenceFrameCount += 1
+            if self.silenceFrameCount > self.maxSilenceFrames {
+                self.isVoiceActiveInternal = false
+                voiceEnded = true
             }
         }
         
-        if voiceActivityDetected {
+        // Dispatch UI updates and callbacks to MainActor
+        Task { @MainActor in
+            self.audioLevel = level
+            if voiceStarted {
+                self.voiceActivityDetected = true
+                self.onVoiceStart?()
+            }
+            if voiceEnded {
+                self.voiceActivityDetected = false
+                self.onVoiceEnd?()
+            }
+        }
+        
+        // Forward buffer if voice is active
+        if isVoiceActiveInternal {
             onAudioBuffer?(buffer)
         }
     }

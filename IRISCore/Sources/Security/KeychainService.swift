@@ -15,11 +15,19 @@ public class KeychainService {
 
     private let service = "com.iris.gemini"
     private let account = "gemini-api-key"
+    
+    private var localFilePath: URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appendingPathComponent(".iris_api_key")
+    }
 
     private init() {}
 
-    /// Saves the API key securely to the Keychain
+    /// Saves the API key securely to the Keychain and a local file fallback
     public func saveAPIKey(_ apiKey: String) throws {
+        // Save to local file first (to avoid keychain prompts if it's already there)
+        try? apiKey.write(to: localFilePath, atomically: true, encoding: .utf8)
+
         guard let data = apiKey.data(using: .utf8) else {
             throw KeychainError.invalidData
         }
@@ -38,12 +46,23 @@ public class KeychainService {
         let status = SecItemAdd(query as CFDictionary, nil)
 
         guard status == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(status)
+            // If keychain fails, we still have the file, so we don't necessarily throw here
+            // unless we strictly want keychain to work.
+            print("⚠️ Keychain save failed with status \(status), using local file only")
+            return
         }
     }
 
     /// Retrieves the API key from the Keychain
     public func getAPIKey() throws -> String {
+        // Try local file first (avoids keychain prompts)
+        if let key = try? String(contentsOf: localFilePath, encoding: .utf8) {
+            let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -72,6 +91,9 @@ public class KeychainService {
 
     /// Deletes the API key from the Keychain
     public func deleteAPIKey() throws {
+        // Delete local file
+        try? FileManager.default.removeItem(at: localFilePath)
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

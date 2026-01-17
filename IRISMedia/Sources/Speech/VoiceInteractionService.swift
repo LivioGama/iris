@@ -8,28 +8,50 @@ public class VoiceInteractionService: NSObject {
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private var lastTranscriptionTime: Date?
     private var silenceCheckTimer: Timer?
 
     private let silenceThreshold: TimeInterval = 2.5
+    private var isUsingExternalAudio = false
 
     public override init() {
         super.init()
     }
 
-    /// Starts speech recognition with automatic silence detection
-    /// - Parameters:
-    ///   - timeout: Optional timeout in seconds. If nil, no timeout is applied.
+    /// Pre-warms the service by requesting authorization early
+    public func prewarm() {
+        SFSpeechRecognizer.requestAuthorization { status in
+            print("🎤 Speech recognition pre-warmed: \(status)")
+        }
+    }
+
+    ///   - onPartialResult: Called with partial transcription as words are recognized in real-time
     ///   - completion: Called with transcribed text when user stops speaking
-    public func startListening(timeout: TimeInterval? = nil, completion: @escaping (String) -> Void) {
+    public func startListening(timeout: TimeInterval? = nil, useExternalAudio: Bool = false, onSpeechDetected: (() -> Void)? = nil, onPartialResult: ((String) -> Void)? = nil, completion: @escaping (String) -> Void) {
+        self.isUsingExternalAudio = useExternalAudio
+
+        if useExternalAudio {
+            SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    if authStatus == .authorized {
+                        self.startRecordingWithExternalAudio(timeout: timeout, onSpeechDetected: onSpeechDetected, onPartialResult: onPartialResult, completion: completion)
+                    } else {
+                        completion("")
+                    }
+                }
+            }
+            return
+        }
+
         SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
             guard let self = self else { return }
 
             DispatchQueue.main.async {
                 switch authStatus {
                 case .authorized:
-                    self.startRecording(timeout: timeout, completion: completion)
+                    self.startRecording(timeout: timeout, onSpeechDetected: onSpeechDetected, onPartialResult: onPartialResult, completion: completion)
                 case .denied, .restricted, .notDetermined:
                     print("❌ Speech recognition not authorized")
                     completion("")
@@ -40,12 +62,112 @@ public class VoiceInteractionService: NSObject {
         }
     }
 
-    private var timeoutTimer: Timer?
+    private func startRecordingWithExternalAudio(timeout: TimeInterval?, onSpeechDetected: (() -> Void)?, onPartialResult: ((String) -> Void)?, completion: @escaping (String) -> Void) {
+        print("🎤 startRecordingWithExternalAudio: START")
 
-    private func startRecording(timeout: TimeInterval?, completion: @escaping (String) -> Void) {
+        // Reset flags for new recording session
+        speechDetectedCallbackCalled = false
+        completionCalled = false
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        print("🎤 startRecordingWithExternalAudio: Creating request")
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        guard let recognitionRequest = recognitionRequest else {
+            print("❌ startRecordingWithExternalAudio: Failed to create request")
+            completion("")
+            return
+        }
+        recognitionRequest.shouldReportPartialResults = true
+        var transcribedText = ""
+        print("🎤 startRecordingWithExternalAudio: Starting recognition task")
+        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self = self else { return }
+            if let result = result {
+                transcribedText = result.bestTranscription.formattedString
+                self.lastTranscriptionTime = Date()
+
+                // Stream partial results in real-time
+                onPartialResult?(transcribedText)
+
+                if !self.speechDetectedCallbackCalled && !transcribedText.isEmpty {
+                    self.speechDetectedCallbackCalled = true
+                    onSpeechDetected?()
+                }
+                self.startSilenceDetectionNoNode(completion: completion, transcribedTextGetter: { transcribedText })
+            }
+            if error != nil {
+                print("❌ startRecordingWithExternalAudio: TASK ERROR: \(error!.localizedDescription)")
+                self.stopRecordingInternalNoNode(completion: completion, transcribedText: transcribedText)
+            }
+        }
+        print("🎤 startRecordingWithExternalAudio: Task started = \(recognitionTask != nil)")
+        lastTranscriptionTime = nil
+        startSilenceDetectionNoNode(completion: completion, transcribedTextGetter: { transcribedText })
+        if let timeout = timeout {
+            print("⏱️ startRecordingWithExternalAudio: Setting timer for \(timeout)s")
+            timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+                print("⏱️ startRecordingWithExternalAudio: Timeout reached")
+                self?.stopRecordingInternalNoNode(completion: completion, transcribedText: transcribedText)
+            }
+        }
+    }
+
+    public func receiveBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard isUsingExternalAudio && recognitionRequest != nil else { return }
+        recognitionRequest?.append(buffer)
+    }
+
+    private func startSilenceDetectionNoNode(completion: @escaping (String) -> Void, transcribedTextGetter: @escaping () -> String) {
+        silenceCheckTimer?.invalidate()
+        silenceCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            let transcribedText = transcribedTextGetter()
+            if let lastTime = self.lastTranscriptionTime, !transcribedText.isEmpty, Date().timeIntervalSince(lastTime) >= self.silenceThreshold {
+                timer.invalidate()
+                self.stopRecordingInternalNoNode(completion: completion, transcribedText: transcribedText)
+            }
+        }
+    }
+
+    private func stopRecordingInternalNoNode(completion: @escaping (String) -> Void, transcribedText: String) {
+        // Prevent calling completion multiple times
+        guard !completionCalled else {
+            print("⚠️ Completion already called, skipping duplicate callback")
+            return
+        }
+        completionCalled = true
+
+        silenceCheckTimer?.invalidate()
+        silenceCheckTimer = nil
+        timeoutTimer?.invalidate()
+        timeoutTimer = nil
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        recognitionTask = nil
+        lastTranscriptionTime = nil
+        completion(transcribedText)
+    }
+
+    private var timeoutTimer: Timer?
+    private var speechDetectedCallbackCalled = false
+    private var completionCalled = false
+
+    private func startRecording(timeout: TimeInterval?, onSpeechDetected: (() -> Void)?, onPartialResult: ((String) -> Void)?, completion: @escaping (String) -> Void) {
+        // Reset flags for new recording session
+        speechDetectedCallbackCalled = false
+        completionCalled = false
+
         // Prevent concurrent recordings
-        if audioEngine.isRunning {
+        if audioEngine?.isRunning == true {
             print("⚠️ Audio engine already running, skipping")
+            completion("")
+            return
+        }
+
+        // 1. Reset/Create fresh audio engine to avoid state issues
+        audioEngine = AVAudioEngine()
+        guard let audioEngine = audioEngine else {
             completion("")
             return
         }
@@ -73,6 +195,15 @@ public class VoiceInteractionService: NSObject {
                 transcribedText = result.bestTranscription.formattedString
                 self.lastTranscriptionTime = Date()
 
+                // Stream partial results in real-time
+                onPartialResult?(transcribedText)
+
+                // Call speech detected callback on first transcription
+                if !self.speechDetectedCallbackCalled && !transcribedText.isEmpty {
+                    self.speechDetectedCallbackCalled = true
+                    onSpeechDetected?()
+                }
+
                 // Start/restart silence detection timer
                 self.startSilenceDetection(completion: completion, inputNode: inputNode, transcribedTextGetter: { transcribedText })
             }
@@ -85,6 +216,10 @@ public class VoiceInteractionService: NSObject {
         }
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        // Ensure any previous tap is removed before installing a new one
+        inputNode.removeTap(onBus: 0)
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
             recognitionRequest.append(buffer)
         }
@@ -145,8 +280,9 @@ public class VoiceInteractionService: NSObject {
         timeoutTimer?.invalidate()
         timeoutTimer = nil
 
-        audioEngine.stop()
+        audioEngine?.stop()
         inputNode.removeTap(onBus: 0)
+        audioEngine = nil
 
         recognitionRequest?.endAudio()
         recognitionRequest = nil
@@ -166,11 +302,12 @@ public class VoiceInteractionService: NSObject {
         timeoutTimer?.invalidate()
         timeoutTimer = nil
 
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            let inputNode = audioEngine.inputNode
+        if let engine = audioEngine, engine.isRunning {
+            let inputNode = engine.inputNode
             inputNode.removeTap(onBus: 0)
+            engine.stop()
         }
+        audioEngine = nil
 
         recognitionRequest?.endAudio()
         recognitionRequest = nil
@@ -178,12 +315,16 @@ public class VoiceInteractionService: NSObject {
         recognitionTask = nil
 
         lastTranscriptionTime = nil
+        speechDetectedCallbackCalled = false
 
         print("🛑 Listening stopped manually")
     }
 
     /// Returns true if currently listening
     public var isListening: Bool {
-        return audioEngine.isRunning
+        if isUsingExternalAudio {
+            return recognitionRequest != nil
+        }
+        return audioEngine?.isRunning ?? false
     }
 }

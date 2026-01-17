@@ -51,7 +51,7 @@ struct GeminiResponseOverlay: View {
             VStack {
                 Spacer()
 
-                if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty {
+                if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil {
                     mainContentView
                         .onAppear {
                             print("👁️ Overlay appeared - isListening: \(geminiService.isListening), isProcessing: \(geminiService.isProcessing), messages: \(geminiService.chatMessages.count)")
@@ -66,66 +66,178 @@ struct GeminiResponseOverlay: View {
     }
 
     private var mainContentView: some View {
+        // Single unified overlay container
         HStack(alignment: .top, spacing: 20) {
-            // Screenshot preview
+            // Left side: Screenshot preview
             if let screenshot = geminiService.capturedScreenshot {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Captured Screen")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.7))
-
                     Image(nsImage: screenshot)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 400, maxHeight: 300)
+                        .frame(maxWidth: 500, maxHeight: 600)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.white.opacity(0.3), lineWidth: 1)
                         )
                 }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.85))
-                )
             }
 
-            // Status and response
-            VStack(spacing: 16) {
-                // Show chat messages if they exist
+            // Right side: Listening status and chat
+            VStack(alignment: .leading, spacing: 12) {
+                // Always show listening status in overlay
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(geminiService.isListening ? Color.red : Color.green)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Circle()
+                                .stroke(geminiService.isListening ? Color.red : Color.green, lineWidth: 2)
+                                .scaleEffect(1.5)
+                                .opacity(0.5)
+                        )
+
+                    if geminiService.isListening {
+                        Text("Listening...")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    } else if geminiService.isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+
+                        Text("Processing...")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("Ready...")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+
+                    // Show countdown if timeout is active
+                    if let remaining = geminiService.remainingTimeout {
+                        Text("\(Int(ceil(remaining)))s")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                            .monospacedDigit()
+                    }
+                }
+
+                // Live transcription display
+                if !geminiService.liveTranscription.isEmpty {
+                    Text(geminiService.liveTranscription)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.white.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        )
+                        .transition(.opacity)
+                }
+
+                // Chat messages
                 if !geminiService.chatMessages.isEmpty {
-                    chatView
-                }
-
-                // Show listening/processing indicators
-                if geminiService.isListening {
-                    listeningView
-                } else if geminiService.isProcessing {
-                    processingView
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(geminiService.chatMessages) { message in
+                                    ChatMessageView(message: message)
+                                        .environmentObject(geminiService)
+                                        .id(message.id)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 600)
+                        .onChange(of: geminiService.chatMessages.count) { _ in
+                            // Scroll to the last message when new messages are added
+                            if let lastMessage = geminiService.chatMessages.last {
+                                withAnimation {
+                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onChange(of: geminiService.chatMessages.last?.content) { _ in
+                            // Scroll when message content changes (e.g., loading bubble replaced with actual text)
+                            if let lastMessage = geminiService.chatMessages.last {
+                                withAnimation {
+                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            .frame(maxWidth: 700)
         }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.9))
+                .shadow(color: Color.black.opacity(0.4), radius: 30)
+        )
+        .overlay(
+            // Close button in top-right corner
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        closeResponse()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: 22))
+                            .padding(12)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                }
+                Spacer()
+            }
+        )
         .padding(.horizontal, 40)
-        .padding(.bottom, 100)
+        .padding(.bottom, 40)
     }
 
     private var listeningView: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 12, height: 12)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.red, lineWidth: 2)
-                            .scaleEffect(1.5)
-                            .opacity(0.5)
-                    )
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.red, lineWidth: 2)
+                                .scaleEffect(1.5)
+                                .opacity(0.5)
+                        )
 
-                Text("Listening...")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.white)
+                    Text("Listening...")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                // Show countdown if timeout is active
+                if let remaining = geminiService.remainingTimeout {
+                    Text("\(Int(ceil(remaining)))s")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                        .monospacedDigit()
+                }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -215,6 +327,14 @@ struct GeminiResponseOverlay: View {
                         }
                     }
                 }
+                .onChange(of: geminiService.chatMessages.last?.content) { _ in
+                    // Scroll when message content changes (e.g., loading bubble replaced with actual text)
+                    if let lastMessage = geminiService.chatMessages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
             }
         }
         .padding(24)
@@ -274,7 +394,20 @@ struct ChatMessageView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white.opacity(0.6))
 
-                if hasNumberedList && message.role == .assistant {
+                // Show loading indicator for "..." content, or live streaming text
+                if message.content == "..." {
+                    // Check if we have live streaming Gemini response for this loading bubble
+                    if message.role == .assistant && !geminiService.liveGeminiResponse.isEmpty {
+                        Text(geminiService.liveGeminiResponse)
+                            .font(.system(size: 15))
+                            .foregroundColor(.white.opacity(0.9))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        LoadingDotsView()
+                            .padding(.top, 4)
+                    }
+                } else if hasNumberedList && message.role == .assistant {
                     // Show header text if any (before the numbered list)
                     if let headerText = extractHeaderText(from: message.content) {
                         Text(headerText)
@@ -341,6 +474,7 @@ struct ChatMessageView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
         .background(
@@ -424,5 +558,30 @@ struct ChatMessageView: View {
 
         let footer = footerLines.joined(separator: " ")
         return footer.isEmpty ? nil : footer
+    }
+}
+
+// Loading dots animation view
+struct LoadingDotsView: View {
+    @State private var animationPhase = 0
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.white.opacity(0.7))
+                    .frame(width: 8, height: 8)
+                    .scaleEffect(animationPhase == index ? 1.2 : 0.8)
+                    .animation(
+                        Animation.easeInOut(duration: 0.6)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.2),
+                        value: animationPhase
+                    )
+            }
+        }
+        .onAppear {
+            animationPhase = 1
+        }
     }
 }

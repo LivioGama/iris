@@ -30,6 +30,7 @@ class IRISCoordinator: ObservableObject {
     @Published var currentState: IntentTrigger.State = .idle
     @Published var lastIntent: ResolvedIntent?
     @Published var debugLog: [String] = []
+    @Published var isAccessibilityEnabled = false
 
     @Published var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
     @Published var gazeDebugInfo: String = ""
@@ -80,19 +81,8 @@ class IRISCoordinator: ObservableObject {
         }
         .store(in: &cancellables)
 
-        // Disable tracking when listening, processing, or response is showing
-        Publishers.CombineLatest4(
-            geminiAssistant.$isListening,
-            geminiAssistant.$isProcessing,
-            geminiAssistant.$geminiResponse,
-            geminiAssistant.$chatMessages
-        )
-        .receive(on: RunLoop.main)
-        .sink { [weak self] isListening, isProcessing, response, chatMessages in
-            let shouldDisableTracking = isListening || isProcessing || !response.isEmpty || !chatMessages.isEmpty
-            self?.gazeEstimator.isTrackingEnabled = !shouldDisableTracking
-        }
-        .store(in: &cancellables)
+        // Keep gaze tracking active at all times - user needs to see where they're looking
+        // We only control whether background voice intents are processed based on Gemini state
 
         gazeEstimator.$gazePoint
             .sink { [weak self] point in
@@ -126,32 +116,44 @@ class IRISCoordinator: ObservableObject {
         gazeEstimator.onBlinkDetected = { [weak self] point, element in
             print("🎯 IRISCoordinator: onBlinkDetected callback triggered!")
             Task { @MainActor in
+                guard let self = self else { return }
+
+                // Trigger Gemini assistant (now uses continuous audio stream)
                 print("🎯 IRISCoordinator: Calling geminiAssistant.handleBlink")
-                self?.geminiAssistant.handleBlink(at: point, focusedElement: element)
+                self.geminiAssistant.handleBlink(at: point, focusedElement: element)
             }
         }
         print("✅ IRISCoordinator: Blink callback registered")
 
-        audioService.onVoiceStart = { [weak self] in
-            Task { @MainActor in
-                self?.intentTrigger.voiceStarted()
-                try? self?.speechService.startRecognition()
-                self?.log("Voice started - listening...")
-            }
-        }
+        // Disabled old background voice recognition - now only using overlay-based system
+        // audioService.onVoiceStart = { [weak self] in
+        //     Task { @MainActor in
+        //         self?.intentTrigger.voiceStarted()
+        //         try? self?.speechService.startRecognition()
+        //         self?.log("Voice started - listening...")
+        //     }
+        // }
 
-        audioService.onVoiceEnd = { [weak self] in
-            Task { @MainActor in
-                guard let self = self else { return }
-                let transcript = self.speechService.transcript
-                self.speechService.stopRecognition()
-                self.intentTrigger.voiceEnded(transcript: transcript)
-                self.log("Voice ended: \(transcript)")
-            }
-        }
+        // audioService.onVoiceEnd = { [weak self] in
+        //     Task { @MainActor in
+        //         guard let self = self else { return }
+        //         let transcript = self.speechService.transcript
+        //         self.speechService.stopRecognition()
+        //         self.intentTrigger.voiceEnded(transcript: transcript)
+        //         self.log("Voice ended: \(transcript)")
+        //     }
+        // }
 
         audioService.onAudioBuffer = { [weak self] buffer in
-            self?.speechService.appendBuffer(buffer)
+            guard let self = self else { return }
+
+            // 1. Forward to Gemini (processes only if listening)
+            self.geminiAssistant.receiveAudioBuffer(buffer)
+
+            // 2. Forward to background recognition only if Gemini is NOT active
+            if !self.geminiAssistant.isListening && !self.geminiAssistant.isProcessing {
+                self.speechService.appendBuffer(buffer)
+            }
         }
 
         intentTrigger.onTrigger = { [weak self] gazePoint, transcript in
@@ -165,6 +167,10 @@ class IRISCoordinator: ObservableObject {
     }
 
     func start() async {
+        checkAccessibility()
+        if !isAccessibilityEnabled {
+            requestAccessibilityPermission()
+        }
         do {
             try await audioService.start()
             gazeEstimator.start()
@@ -172,6 +178,29 @@ class IRISCoordinator: ObservableObject {
             log("I.R.I.S activated - EyeGestures Python")
         } catch {
             log("Failed to start: \(error)")
+        }
+    }
+
+    func checkAccessibility() {
+        isAccessibilityEnabled = AXIsProcessTrusted()
+    }
+
+    func requestAccessibilityPermission() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        AXIsProcessTrustedWithOptions(options as CFDictionary)
+
+        // Poll for a few seconds to see if it was enabled
+        var attempts = 0
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            attempts += 1
+            if AXIsProcessTrusted() {
+                Task { @MainActor in
+                    self?.isAccessibilityEnabled = true
+                }
+                timer.invalidate()
+            } else if attempts > 30 {
+                timer.invalidate()
+            }
         }
     }
 

@@ -17,7 +17,7 @@ public enum PathResolver {
 
         if bundlePath.contains("/.build/") {
             return .development
-        } else if bundlePath.contains("/DerivedData/") {
+        } else if bundlePath.contains("/DerivedData/") || bundlePath.contains("/build/Build/Products/") {
             return .xcodeBuild
         } else if bundlePath.contains(".app/") {
             return .bundled
@@ -40,10 +40,34 @@ public enum PathResolver {
             }
 
         case .xcodeBuild:
+            // Handle DerivedData path FIRST (check before build path since DerivedData also contains "Build")
+            if bundlePath.contains("/DerivedData/") {
+                // Try common project locations
+                let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+                let possiblePaths = [
+                    "\(homeDir)/Documents/iris2",
+                    "\(homeDir)/iris2",
+                    "/Users/livio/Documents/iris2"
+                ]
+
+                for path in possiblePaths {
+                    if FileManager.default.fileExists(atPath: "\(path)/Package.swift") {
+                        print("📂 PathResolver: Found project root at \(path)")
+                        return path
+                    }
+                }
+                print("❌ PathResolver: None of the common paths contain Package.swift")
+            }
+
             // Xcode DerivedData build - check for workspace info
             if let workspaceData = Bundle.main.infoDictionary?["PROJECT_ROOT"] as? String {
                 return workspaceData
             }
+            // Handle xcodebuild output directory (build/Build/Products/)
+            if let projectRoot = bundlePath.components(separatedBy: "/build/Build/Products/").first {
+                return projectRoot
+            }
+
             // Fallback: try to find project root from current directory
             let currentDir = FileManager.default.currentDirectoryPath
             if FileManager.default.fileExists(atPath: "\(currentDir)/Package.swift") {
@@ -98,15 +122,25 @@ public enum PathResolver {
     /// - Returns: The absolute path to the script, or nil if not found
     public static func resolvePythonScript(named scriptName: String) -> String? {
         let environment = detectEnvironment()
+        print("🔍 PathResolver: Resolving script '\(scriptName)' in environment: \(environment)")
 
         switch environment {
         case .development, .xcodeBuild:
             // Development mode: script in project root
-            guard let projectRoot = resolveProjectRoot() else { return nil }
+            guard let projectRoot = resolveProjectRoot() else {
+                print("❌ PathResolver: Could not resolve project root")
+                return nil
+            }
+            print("📂 PathResolver: Project root = \(projectRoot)")
+
             let scriptPath = "\(projectRoot)/\(scriptName)"
+            print("🔍 PathResolver: Checking script at: \(scriptPath)")
 
             if FileManager.default.fileExists(atPath: scriptPath) {
+                print("✅ PathResolver: Script found at \(scriptPath)")
                 return scriptPath
+            } else {
+                print("❌ PathResolver: Script not found at \(scriptPath)")
             }
 
         case .bundled:

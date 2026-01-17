@@ -13,6 +13,7 @@ struct ContextualGazeIndicator: View {
         ZStack {
             if let element = detectedElement {
                 DetectedElementView(element: element)
+                    .allowsHitTesting(false)
             }
 
             if useMetalRenderer {
@@ -20,8 +21,10 @@ struct ContextualGazeIndicator: View {
                     .allowsHitTesting(false)
             } else {
                 OptimizedGazeIndicator(point: gazePoint)
+                    .allowsHitTesting(false)
             }
         }
+        .allowsHitTesting(false)
     }
 }
 

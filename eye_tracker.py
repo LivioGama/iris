@@ -62,8 +62,8 @@ def main():
 
     # Long blink detection for screenshot trigger
     # Normal blink: ~3-5 frames (0.1-0.17 seconds)
-    # Intentional long blink: 8 frames (0.27 seconds) - clearly intentional
-    LONG_BLINK_THRESH = 8
+    # Intentional long blink: 10 frames (0.33 seconds) - clearly intentional
+    LONG_BLINK_THRESH = 10
     eyes_closed_counter = 0
     long_blink_triggered = False
 

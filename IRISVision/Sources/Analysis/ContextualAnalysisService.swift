@@ -3,6 +3,7 @@ import CoreGraphics
 import AppKit
 import IRISCore
 
+@MainActor
 public class ContextualAnalysisService {
     public init() {}
 
@@ -11,53 +12,42 @@ public class ContextualAnalysisService {
     private let computerVisionDetector = ComputerVisionDetector()
 
     private var lastAnalysisTime: Date?
-    private let analysisThrottleInterval: TimeInterval = 0.2 // 200ms between analyses for near-instant response
+    private let analysisThrottleInterval: TimeInterval = 0.2
     private var analysisInProgress = false
     private var lastAnalysisPoint: CGPoint?
-    private let minDistanceForReanalysis: CGFloat = 200.0 // pixels - increased to reduce redundant analysis
+    private let minDistanceForReanalysis: CGFloat = 200.0
 
     // Queue for pending analysis requests
     private var pendingRequests: [(point: CGPoint, image: CGImage)] = []
-    private let queueLock = NSLock()
 
     public func analyzeContext(around gazePoint: CGPoint, screenImage: CGImage) async -> DetectedElement? {
         // If analysis is in progress, queue this request
-        queueLock.lock()
         if analysisInProgress {
             pendingRequests.append((point: gazePoint, image: screenImage))
-            queueLock.unlock()
             return nil
         }
 
         // Check if we should skip this analysis
         if shouldSkipAnalysis(for: gazePoint) {
-            queueLock.unlock()
             return nil
         }
 
         analysisInProgress = true
         lastAnalysisTime = Date()
         lastAnalysisPoint = gazePoint
-        queueLock.unlock()
 
         // Perform the analysis
         let result = await performAnalysis(gazePoint: gazePoint, screenImage: screenImage)
 
         // Mark analysis as complete and process any queued requests
-        queueLock.lock()
         analysisInProgress = false
 
         // Process the most recent queued request (discard older ones)
         if let latestRequest = pendingRequests.last {
             pendingRequests.removeAll() // Clear all pending requests
-            queueLock.unlock()
 
             // Process the latest request
-            Task {
-                _ = await self.analyzeContext(around: latestRequest.point, screenImage: latestRequest.image)
-            }
-        } else {
-            queueLock.unlock()
+            return await self.analyzeContext(around: latestRequest.point, screenImage: latestRequest.image)
         }
 
         return result

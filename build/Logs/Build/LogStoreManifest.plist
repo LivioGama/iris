@@ -5,6 +5,49 @@
 	<key>logFormatVersion</key>
 	<integer>12</integer>
 	<key>logs</key>
-	<dict/>
+	<dict>
+		<key>F3C988FF-B15F-4DCF-869F-CECEB8055349</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>F3C988FF-B15F-4DCF-869F-CECEB8055349.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>S</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>iris2</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>IRIS</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Cleaning workspace iris2 with scheme IRIS and configuration Debug</string>
+			<key>timeStartedRecording</key>
+			<real>790324469.82486904</real>
+			<key>timeStoppedRecording</key>
+			<real>790324470.15253901</real>
+			<key>title</key>
+			<string>Cleaning workspace iris2 with scheme IRIS and configuration Debug</string>
+			<key>uniqueIdentifier</key>
+			<string>F3C988FF-B15F-4DCF-869F-CECEB8055349</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

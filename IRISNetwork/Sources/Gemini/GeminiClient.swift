@@ -54,11 +54,16 @@ public struct GeminiResponse: Codable {
 /// Low-level HTTP communication with Gemini API
 /// Responsibility: Network requests only, no business logic
 public class GeminiClient {
-    private let apiKey: String
+    private var apiKey: String
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+    private let streamURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent"
 
     public init(apiKey: String) {
         self.apiKey = apiKey
+    }
+
+    public func updateAPIKey(_ newKey: String) {
+        self.apiKey = newKey
     }
 
     public func sendRequest(_ request: GeminiRequest) async throws -> GeminiResponse {
@@ -85,6 +90,58 @@ public class GeminiClient {
         }
 
         return try JSONDecoder().decode(GeminiResponse.self, from: data)
+    }
+
+    /// Streams responses from Gemini API, calling onPartialResponse for each chunk
+    public func sendStreamingRequest(_ request: GeminiRequest, onPartialResponse: @escaping (String) -> Void) async throws -> String {
+        guard !apiKey.isEmpty else {
+            throw GeminiError.missingAPIKey
+        }
+
+        let url = URL(string: "\(streamURL)?key=\(apiKey)&alt=sse")!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+
+        let (asyncBytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GeminiError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: "Stream request failed")
+        }
+
+        var fullText = ""
+        var buffer = ""
+
+        // Process streaming response (Server-Sent Events format)
+        for try await byte in asyncBytes {
+            let char = Character(UnicodeScalar(byte))
+            buffer.append(char)
+
+            // SSE messages end with double newline
+            if buffer.hasSuffix("\n\n") {
+                let lines = buffer.components(separatedBy: "\n")
+                for line in lines {
+                    if line.hasPrefix("data: ") {
+                        let jsonString = String(line.dropFirst(6)) // Remove "data: " prefix
+                        if let data = jsonString.data(using: .utf8),
+                           let response = try? JSONDecoder().decode(GeminiResponse.self, from: data),
+                           let text = response.candidates.first?.content.parts.first?.text {
+                            fullText += text
+                            onPartialResponse(fullText)
+                        }
+                    }
+                }
+                buffer = ""
+            }
+        }
+
+        return fullText
     }
 }
 

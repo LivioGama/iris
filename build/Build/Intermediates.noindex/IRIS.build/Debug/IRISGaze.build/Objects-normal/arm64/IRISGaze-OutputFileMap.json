@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/IRISGaze-primary.dia",
+    "emit-module-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/IRISGaze-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/IRISGaze-primary-emit-module.dia",
+    "pch" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/IRISGaze-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/IRISGaze-primary.swiftdeps"
+  },
+  "/Users/livio/Documents/iris2/IRISGaze/Sources/Tracking/GazeEstimator.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/GazeEstimator~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISGaze/Sources/Tracking/KalmanFilter.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/KalmanFilter~partial.swiftmodule"
+  },
+  "/Users/livio/Documents/iris2/IRISGaze/Sources/Tracking/PythonProcessManager.swift" : {
+    "const-values" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.swiftconstvalues",
+    "dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.d",
+    "diagnostics" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.dia",
+    "index-unit-output-path" : "/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.o",
+    "llvm-bc" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.bc",
+    "object" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.o",
+    "swift-dependencies" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager.swiftdeps",
+    "swiftmodule" : "/Users/livio/Documents/iris2/build/Build/Intermediates.noindex/IRIS.build/Debug/IRISGaze.build/Objects-normal/arm64/PythonProcessManager~partial.swiftmodule"
+  }
+}

@@ -64,12 +64,7 @@ class DependencyContainer {
 
     // Network Services
     private(set) lazy var geminiClient: GeminiClient = {
-        let apiKey: String
-        if let keychainKey = try? KeychainService.shared.getAPIKey() {
-            apiKey = keychainKey
-        } else {
-            apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
-        }
+        let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
         return GeminiClient(apiKey: apiKey)
     }()
 
@@ -86,7 +81,13 @@ class DependencyContainer {
     }()
 
     private(set) lazy var geminiAssistant: GeminiAssistantOrchestrator = {
-        GeminiAssistantOrchestrator()
+        GeminiAssistantOrchestrator(
+            geminiClient: geminiClient,
+            conversationManager: conversationManager,
+            voiceInteractionService: voiceInteractionService,
+            messageExtractionService: messageExtractionService,
+            screenshotService: screenshotService
+        )
     }()
 
     // Core Services
@@ -165,6 +166,15 @@ class DependencyContainer {
         conversationManager.clearHistory()
     }
 
+    // MARK: - API Key Management
+
+    /// Reloads the API key from environment variable and updates the Gemini client
+    func reloadAPIKey() {
+        let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        geminiClient.updateAPIKey(apiKey)
+        print("🔑 API Key reloaded from environment variable")
+    }
+
     // MARK: - Testing Support
 
     #if DEBUG
@@ -186,7 +196,7 @@ class DependencyContainer {
 // These extensions help existing services conform to the protocols defined in Phase 7
 
 @MainActor
-extension GazeEstimator: GazeTrackingService {
+extension GazeEstimator: @preconcurrency GazeTrackingService {
     public var currentGaze: CGPoint {
         return gazePoint
     }
@@ -203,17 +213,17 @@ extension AccessibilityDetector: ElementDetectionService {
 }
 
 @MainActor
-extension IRISMedia.ScreenCaptureService: ScreenCaptureServiceProtocol {
+extension IRISMedia.ScreenCaptureService: @preconcurrency ScreenCaptureServiceProtocol {
     // Already conforms - no changes needed
 }
 
 @MainActor
-extension IRISMedia.AudioService: AudioServiceProtocol {
+extension IRISMedia.AudioService: @preconcurrency AudioServiceProtocol {
     // Already conforms - no changes needed
 }
 
 @MainActor
-extension SpeechService: SpeechRecognitionService {
+extension SpeechService: @preconcurrency SpeechRecognitionService {
     // Already conforms - no changes needed
 }
 

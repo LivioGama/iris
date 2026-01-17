@@ -13,6 +13,7 @@ public enum DominantEye: String {
     case left, right
 }
 
+@MainActor
 public class GazeEstimator: ObservableObject {
     @MainActor @Published public var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
     @MainActor @Published public var isTracking = false
@@ -180,7 +181,9 @@ public class GazeEstimator: ObservableObject {
 
         // Always use 60 FPS for smooth gaze tracking - runs on main RunLoop
         timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
-            self?.animateToTarget()
+            Task { @MainActor in
+                self?.animateToTarget()
+            }
         }
     }
 
