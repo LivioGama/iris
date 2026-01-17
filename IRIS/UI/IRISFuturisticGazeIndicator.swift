@@ -1,0 +1,177 @@
+//
+//  IRISFuturisticGazeIndicator.swift
+//  IRIS
+//
+//  Created by Claude on 2025-01-17.
+//
+
+import SwiftUI
+import IRISGaze
+import IRISCore
+
+/// Futuristic gaze indicator that feels like an intelligent presence
+struct IRISFuturisticGazeIndicator: View {
+    let gazePoint: CGPoint
+    let detectedElement: DetectedElement?
+    let config: GazeIndicatorConfig
+
+    @State private var awarenessIntensity: Double = 0.3
+    @State private var consciousnessPulse: Double = 1.0
+    @State private var timer: Timer?
+
+    private let indicatorSize: CGFloat = 160
+
+    var body: some View {
+        ZStack {
+            // Element rectangle highlight (when detected) - absolute positioning
+            if let element = detectedElement {
+                elementHighlight(for: element)
+                    .allowsHitTesting(false)
+            }
+
+            // Gaze indicators - positioned at gaze point
+            ZStack {
+                // Main consciousness field
+                consciousnessField
+                    .allowsHitTesting(false)
+
+                // Awareness indicator (always visible for now to debug)
+                awarenessIndicator
+                    .opacity(detectedElement != nil ? 1.0 : 0.3)
+                    .transition(.scale.combined(with: .opacity))
+            }
+            .position(gazePoint)
+        }
+        .onAppear {
+            startConsciousnessCycle()
+        }
+        .onDisappear {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    private var consciousnessField: some View {
+        ZStack {
+            // Outer consciousness ring
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            config.color.opacity(0.4),
+                            config.color.opacity(0.2),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
+                .frame(width: indicatorSize * 0.9, height: indicatorSize * 0.9)
+                .scaleEffect(consciousnessPulse)
+                .blur(radius: 1)
+
+            // Intelligence field
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            config.color.opacity(awarenessIntensity),
+                            config.color.opacity(awarenessIntensity * 0.5),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: indicatorSize / 3
+                    )
+                )
+                .frame(width: indicatorSize * 0.7, height: indicatorSize * 0.7)
+                .blur(radius: 8)
+
+            // Inner awareness core
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            config.color.opacity(0.8),
+                            config.color.opacity(0.4)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                        .blur(radius: 1)
+                )
+                .frame(width: 20, height: 20)
+                .shadow(color: config.color.opacity(0.5), radius: 12)
+        }
+    }
+
+    private var awarenessIndicator: some View {
+        Circle()
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        config.color.opacity(0.6),
+                        config.color.opacity(0.4),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 2
+            )
+            .frame(width: indicatorSize * 0.6, height: indicatorSize * 0.6)
+            .scaleEffect(1 + (awarenessIntensity * 0.3))
+    }
+
+    private func startConsciousnessCycle() {
+        // Awareness breathing - discrete random jumps every 2.5s (original algorithm)
+        timer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 1.0)) {
+                awarenessIntensity = Double.random(in: 0.2...0.4)
+                consciousnessPulse = Double.random(in: 0.95...1.05)
+            }
+        }
+    }
+
+    // MARK: - Element Highlighting
+
+    private func elementHighlight(for element: DetectedElement) -> some View {
+        ZStack {
+            // Filled background
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            config.color.opacity(0.15),
+                            config.color.opacity(0.1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: element.bounds.width, height: element.bounds.height)
+                .position(x: element.bounds.midX, y: element.bounds.midY)
+
+            // Stroke border
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            config.color.opacity(0.8),
+                            config.color.opacity(0.6)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 2
+                )
+                .frame(width: element.bounds.width, height: element.bounds.height)
+                .position(x: element.bounds.midX, y: element.bounds.midY)
+        }
+    }
+}

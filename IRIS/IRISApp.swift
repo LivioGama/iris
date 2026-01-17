@@ -232,7 +232,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.hasShadow = false
 
-            let hostingView = NSHostingView(rootView: OverlayView().environmentObject(coordinator))
+            let hostingView = NSHostingView(rootView: OverlayView(screen: screen).environmentObject(coordinator))
             window.contentView = hostingView
 
             overlayWindows.append(window)

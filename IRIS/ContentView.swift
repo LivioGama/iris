@@ -3,8 +3,27 @@ import IRISCore
 import IRISGaze
 import IRISNetwork
 
+struct ProcessingIndicator: View {
+    @State private var rotation = 0.0
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(Color.orange, lineWidth: 4)
+            .frame(width: 40, height: 40)
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+    }
+}
+
+
 struct OverlayView: View {
     @EnvironmentObject var coordinator: IRISCoordinator
+    let screen: NSScreen // Screen this overlay belongs to
 
     // Debug flag - set to true to show debug overlays
     private let showDebugOverlays = false
@@ -21,10 +40,14 @@ struct OverlayView: View {
                                 !coordinator.geminiAssistant.chatMessages.isEmpty ||
                                 coordinator.geminiAssistant.capturedScreenshot != nil
 
+            // Show gaze indicator
             if coordinator.gazeEstimator.isTrackingEnabled && !isGeminiActive {
-                ContextualGazeIndicator(
+                let modeConfig = ModeConfigurationFactory.config(for: "general")
+
+                IRISFuturisticGazeIndicator(
                     gazePoint: coordinator.gazeEstimator.gazePoint,
-                    detectedElement: coordinator.gazeEstimator.detectedElement
+                    detectedElement: coordinator.gazeEstimator.detectedElement,
+                    config: modeConfig.gazeIndicatorStyle
                 )
                 .allowsHitTesting(false)
             }
@@ -44,19 +67,22 @@ struct OverlayView: View {
                 .allowsHitTesting(false)
             }
 
-            if coordinator.currentState == .processing {
+            // Processing state indicator (only on active screen)
+            if coordinator.currentState == .processing,
+               coordinator.currentScreen === screen {
                 ProcessingIndicator()
                     .position(x: coordinator.gazeEstimator.gazePoint.x, y: coordinator.gazeEstimator.gazePoint.y - 60)
                     .allowsHitTesting(false)
             }
 
-            if let intent = coordinator.lastIntent {
+            // Show intent results only on active screen
+            if let intent = coordinator.lastIntent,
+               coordinator.currentScreen === screen {
                 IntentResultView(intent: intent)
                     .allowsHitTesting(false)
             }
 
-            // Only the Gemini overlay should accept hits when active
-            GeminiResponseOverlay(geminiService: coordinator.geminiAssistant)
+            GeminiResponseOverlayModern(geminiService: coordinator.geminiAssistant)
 
             if showDebugOverlays {
                 VStack {
@@ -139,23 +165,6 @@ struct CalibrationTarget: View {
                 scale = 1.4
             }
         }
-    }
-}
-
-struct ProcessingIndicator: View {
-    @State private var rotation = 0.0
-
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(Color.orange, lineWidth: 4)
-            .frame(width: 40, height: 40)
-            .rotationEffect(.degrees(rotation))
-            .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
     }
 }
 
