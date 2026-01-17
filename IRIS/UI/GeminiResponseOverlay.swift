@@ -82,17 +82,15 @@ struct GeminiResponseOverlay: View {
         HStack(alignment: .top, spacing: 20) {
             // Left side: Screenshot preview
             if let screenshot = geminiService.capturedScreenshot {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(nsImage: screenshot)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 500, maxHeight: 600)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                }
+                Image(nsImage: screenshot)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 500, maxHeight: 600)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
             }
 
             // Right side: Listening status and chat
