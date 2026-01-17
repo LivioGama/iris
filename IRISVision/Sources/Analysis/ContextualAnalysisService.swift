@@ -2,7 +2,6 @@ import Foundation
 import CoreGraphics
 import AppKit
 import IRISCore
-import IRISVision
 
 public class ContextualAnalysisService {
     public init() {}
