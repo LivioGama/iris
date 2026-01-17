@@ -9,15 +9,22 @@ import IRISMedia
 
 @MainActor
 class IRISCoordinator: ObservableObject {
-    let cameraService = CameraService()
-    let gazeEstimator = GazeEstimator()
-    let audioService = AudioService()
-    let speechService = SpeechService()
-    let screenCaptureService = ScreenCaptureService()
-    let intentTrigger = IntentTrigger()
-    let intentResolver = IntentResolver()
-    let contextualAnalysis = ContextualAnalysisService()
-    let geminiAssistant = GeminiAssistantOrchestrator()
+    // MARK: - Dependencies (Injected)
+
+    private let container: DependencyContainer
+
+    // Services accessed via container
+    let cameraService: CameraService
+    let gazeEstimator: GazeEstimator
+    let audioService: IRISMedia.AudioService
+    let speechService: SpeechService
+    let screenCaptureService: IRISMedia.ScreenCaptureService
+    let intentTrigger: IntentTrigger
+    let intentResolver: IntentResolver
+    let contextualAnalysis: ContextualAnalysisService
+    let geminiAssistant: GeminiAssistantOrchestrator
+
+    // MARK: - Published State
 
     @Published var isActive = false
     @Published var currentState: IntentTrigger.State = .idle
@@ -36,8 +43,29 @@ class IRISCoordinator: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    init() {
+    // MARK: - Initialization
+
+    /// Dependency injection initializer
+    init(container: DependencyContainer) {
+        self.container = container
+
+        // Inject all services from container
+        self.cameraService = container.cameraService
+        self.gazeEstimator = container.gazeEstimator
+        self.audioService = container.audioService
+        self.speechService = container.speechService
+        self.screenCaptureService = container.screenCaptureService
+        self.intentTrigger = container.intentTrigger
+        self.intentResolver = container.intentResolver
+        self.contextualAnalysis = container.contextualAnalysisService
+        self.geminiAssistant = container.geminiAssistant
+
         setupBindings()
+    }
+
+    /// Legacy initializer for backward compatibility (will be deprecated)
+    convenience init() {
+        self.init(container: .shared)
     }
 
     private func setupBindings() {

@@ -17,7 +17,8 @@ struct IRISApp: App {
 }
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
-    let coordinator = IRISCoordinator()
+    // Using dependency injection via container
+    let coordinator = DependencyContainer.shared.makeCoordinator()
     var overlayWindows: [NSWindow] = []
     private var screenTimer: Timer?
     private var mouseEventObserver: AnyCancellable?
