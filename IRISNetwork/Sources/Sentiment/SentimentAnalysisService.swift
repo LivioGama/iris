@@ -35,15 +35,15 @@ public class SentimentAnalysisService {
 
     private let apiKey: String
 
-    // System and analysis prompts from the judge endpoint
-    private let systemPrompt = "Tu es un expert en analyse comportementale. Tu donnes des réponses concises et percutantes, en 3-4 phrases maximum."
+    // System and analysis prompts
+    private let systemPrompt = "You are an expert in behavioral analysis. Provide concise and insightful responses in 3-4 sentences maximum."
 
     private let analysisPrompt = """
-    Analyse brièvement le texte suivant: décris l'attitude, la posture émotionnelle et l'image renvoyée par l'auteur. Mets en évidence les traits de caractère et la dynamique relationnelle. Réponds de manière fluide et nuancée en 3-4 phrases.
+    Briefly analyze the following text: describe the attitude, emotional stance, and image conveyed by the author. Highlight personality traits and relational dynamics. Respond fluently and with nuance in 3-4 sentences.
 
-    Réponds dans la langue du texte.
+    Respond in the language of the text.
 
-    Texte:
+    Text:
     """
 
     public init() {

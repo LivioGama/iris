@@ -36,6 +36,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
     private var lastSentTime: Date?
     private let deduplicationWindow: TimeInterval = 5.0
 
+    // Prompts
+    private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
+
     // MARK: - Initialization
     public override init() {
         // Get API key from Keychain or environment
@@ -163,7 +166,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             return
         } else if sentimentAnalysisService.detectsSentimentRequest(in: prompt) {
             print("🎭 Sentiment analysis request detected")
-            actualPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
+            actualPrompt = messageExtractionPrompt
             waitingForMessageExtraction = true
         }
 
@@ -256,7 +259,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             await handleMessageSelection(messageNumber: messageNumber)
             return
         } else if sentimentAnalysisService.detectsSentimentRequest(in: prompt) {
-            actualPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
+            actualPrompt = messageExtractionPrompt
             waitingForMessageExtraction = true
         }
 

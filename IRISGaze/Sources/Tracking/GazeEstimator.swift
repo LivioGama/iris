@@ -374,9 +374,6 @@ public class GazeEstimator: ObservableObject {
         processManager.restart()
     }
 
-    public func processFrame(_ pixelBuffer: CVPixelBuffer) {
-    }
-
     deinit {
         timer?.invalidate()
         processManager.stop()

@@ -17,9 +17,6 @@ public class AccessibilityDetector {
         systemWideElement = AXUIElementCreateSystemWide()
     }
 
-    public func buildElementIndex() {
-    }
-
     public func findElement(at point: CGPoint) -> DetectedElement? {
         guard var element = getElementAt(point: point) else {
             return nil
@@ -103,9 +100,6 @@ public class AccessibilityDetector {
         return bounds.width >= minWidth &&
                bounds.height >= minHeight &&
                bounds.area >= minArea
-    }
-
-    public func clearCache() {
     }
 
     public func getElementAt(point: CGPoint) -> AXUIElement? {
