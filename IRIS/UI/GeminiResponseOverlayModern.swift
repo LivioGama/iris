@@ -270,17 +270,24 @@ struct GeminiResponseOverlayModern: View {
                         .opacity(0.7)
                 }
 
-                // Show processing indicator
+                // Show streaming Gemini response while processing
                 if geminiService.isProcessing {
-                    HStack(spacing: IRISSpacing.sm) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: currentConfig.accentColor))
-                            .scaleEffect(0.8)
-                        Text("Thinking...")
-                            .irisStyle(.caption)
-                            .foregroundColor(IRISColors.textSecondary)
+                    if !geminiService.liveGeminiResponse.isEmpty {
+                        // Stream the response in real-time
+                        chatMessageView(message: ChatMessage(role: .assistant, content: geminiService.liveGeminiResponse, timestamp: Date()))
+                            .opacity(0.9)
+                    } else {
+                        // Just started processing
+                        HStack(spacing: IRISSpacing.sm) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: currentConfig.accentColor))
+                                .scaleEffect(0.8)
+                            Text("Thinking...")
+                                .irisStyle(.caption)
+                                .foregroundColor(IRISColors.textSecondary)
+                        }
+                        .padding(IRISSpacing.md)
                     }
-                    .padding(IRISSpacing.md)
                 }
             }
             .padding(IRISSpacing.lg)
