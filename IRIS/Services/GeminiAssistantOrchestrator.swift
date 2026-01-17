@@ -117,14 +117,21 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             return
         }
 
-        // Check if screenshot is blank/white before opening overlay
+        // Check if screenshot is blank/white - if so, capture mouse location screen instead
+        var finalScreenshot = screenshot
         if isBlankScreenshot(screenshot) {
-            print("⚠️ Screenshot is blank, ignoring blink")
-            return
+            print("⚠️ Gaze area screenshot is blank, falling back to mouse location screen")
+            if let fallbackScreenshot = captureFallbackScreenshot() {
+                finalScreenshot = fallbackScreenshot
+                print("✅ Using fallback screenshot of mouse location screen")
+            } else {
+                print("❌ Fallback screenshot also failed, ignoring blink")
+                return
+            }
         }
 
         // Store screenshot and focused element
-        self.capturedScreenshot = screenshot
+        self.capturedScreenshot = finalScreenshot
         self.currentFocusedElement = focusedElement
 
         // Reset conversation for new interaction
@@ -1120,5 +1127,33 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         // If more than 95% of sampled pixels are white, consider it blank
         let whiteRatio = Double(whitePixelCount) / Double(totalSampled)
         return whiteRatio > 0.95
+    }
+
+    private func captureFallbackScreenshot() -> NSImage? {
+        // Get the screen where the mouse is currently located
+        let mouseLocation = NSEvent.mouseLocation
+
+        guard let mouseScreen = NSScreen.screens.first(where: { screen in
+            screen.frame.contains(mouseLocation)
+        }) else {
+            print("⚠️ Could not find screen containing mouse")
+            return nil
+        }
+
+        print("📸 Capturing fallback screenshot of mouse screen: \(mouseScreen.frame)")
+
+        // Capture the entire screen where the mouse is
+        let rect = mouseScreen.frame
+        guard let cgImage = CGWindowListCreateImage(
+            rect,
+            .optionOnScreenOnly,
+            kCGNullWindowID,
+            [.bestResolution, .boundsIgnoreFraming]
+        ) else {
+            print("❌ Failed to capture mouse screen")
+            return nil
+        }
+
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 }

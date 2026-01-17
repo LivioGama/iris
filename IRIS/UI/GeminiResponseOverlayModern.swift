@@ -101,27 +101,11 @@ struct GeminiResponseOverlayModern: View {
 
     private var statusBar: some View {
         HStack(spacing: IRISSpacing.sm) {
-            // Drag handle - click and drag to move window
-            Image(systemName: "line.3.horizontal")
-                .foregroundColor(IRISColors.textSecondary)
+            // Status icon
+            Image(systemName: "sparkles")
+                .foregroundColor(IRISColors.accent(for: "general"))
                 .font(.system(size: 14))
-                .padding(.leading, IRISSpacing.xs)
-                .gesture(
-                    DragGesture()
-                        .onChanged { gesture in
-                            if let window = NSApp.windows.first(where: { $0.level == .floating && !$0.styleMask.contains(.titled) }) {
-                                let newOrigin = CGPoint(
-                                    x: window.frame.origin.x + gesture.translation.width,
-                                    y: window.frame.origin.y - gesture.translation.height
-                                )
-                                window.setFrameOrigin(newOrigin)
-                            }
-                        }
-                )
-                .help("Drag to move window")
-
-            Divider()
-                .frame(height: 16)
+                .padding(.leading, IRISSpacing.sm)
 
             Circle()
                 .fill(geminiService.isListening ? Color.red : Color.green)
@@ -159,7 +143,20 @@ struct GeminiResponseOverlayModern: View {
             }
 
             Spacer()
+
+            // Close button
+            Button(action: {
+                geminiService.chatMessages.removeAll()
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(IRISColors.textSecondary)
+                    .font(.system(size: 16))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Close overlay")
+            .padding(.trailing, IRISSpacing.xs)
         }
+        .frame(height: 40)
     }
 
     // MARK: - Mode-Specific Views
