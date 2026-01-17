@@ -208,15 +208,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupMouseEventObserver() {
-        // When ONLY gaze indicator is showing: ignore mouse events (click-through)
-        // When Gemini overlay is active: accept mouse events for interactive UI
+        // When Gemini overlay is active, bring window to front but keep click-through
+        // SwiftUI views inside will handle their own hit testing
         mouseEventObserver = coordinator.$shouldAcceptMouseEvents
             .receive(on: RunLoop.main)
             .sink { [weak self] shouldAccept in
                 self?.overlayWindows.forEach { window in
-                    // shouldAccept = true when Gemini overlay is active (needs clicks)
-                    // shouldAccept = false when only gaze indicator is showing (click-through)
-                    window.ignoresMouseEvents = !shouldAccept
+                    if shouldAccept {
+                        // Gemini overlay is active - bring to front
+                        window.level = .floating
+                        window.ignoresMouseEvents = true
+                    } else {
+                        // Only gaze indicator - stay behind
+                        window.level = .normal
+                        window.ignoresMouseEvents = true
+                    }
                 }
             }
     }
@@ -230,7 +236,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
 
-            window.level = .floating
+            window.level = .normal  // Normal level so other windows can be on top
             window.isOpaque = false
             window.backgroundColor = .clear
             window.ignoresMouseEvents = true

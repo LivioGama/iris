@@ -32,29 +32,24 @@ struct GeminiResponseOverlayModern: View {
     // MARK: - Main Content
 
     private var content: some View {
-        ZStack {
-            // Click-through background when inactive
-            if isOverlayActive {
-                Color.black.opacity(0.001)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(true)
-                    .onTapGesture { /* Prevent click-through */ }
-            } else {
+        GeometryReader { geometry in
+            ZStack {
+                // Fully transparent background - always click-through to windows behind
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .allowsHitTesting(false)
-            }
 
-            VStack {
-                if isOverlayActive {
-                    modeBasedContent
-                        .allowsHitTesting(true)
-                        .padding(.top, 40)
+                VStack {
+                    if isOverlayActive {
+                        modeBasedContent
+                            .allowsHitTesting(true)
+                            .padding(.top, 40)
+                    }
+                    Spacer()
                 }
-                Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var isOverlayActive: Bool {
@@ -74,13 +69,12 @@ struct GeminiResponseOverlayModern: View {
                 .padding(.horizontal, IRISSpacing.lg)
                 .padding(.bottom, IRISSpacing.md)
 
-            // Mode-specific layout
-            if let parsedResponse = geminiService.parsedICOIResponse,
-               !geminiService.isListening && !geminiService.isProcessing {
-                modeSpecificView(for: parsedResponse)
+            // Chat-style conversation view
+            if !geminiService.chatMessages.isEmpty {
+                chatView
                     .matchedGeometryEffect(id: "contentArea", in: animation)
             } else {
-                // Loading/listening state
+                // Loading/listening state (initial - no messages yet)
                 loadingStateView
                     .matchedGeometryEffect(id: "contentArea", in: animation)
             }
@@ -204,6 +198,20 @@ struct GeminiResponseOverlayModern: View {
 
     private var loadingStateView: some View {
         VStack(spacing: IRISSpacing.lg) {
+            // Show screenshot preview while listening/processing
+            if let screenshot = geminiService.capturedScreenshot {
+                Image(nsImage: screenshot)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: IRISRadius.normal))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: IRISRadius.normal)
+                            .stroke(IRISColors.stroke, lineWidth: 1)
+                    )
+                    .opacity(0.6)
+            }
+
             if geminiService.isListening {
                 if !geminiService.liveTranscription.isEmpty {
                     Text(geminiService.liveTranscription)
@@ -230,6 +238,86 @@ struct GeminiResponseOverlayModern: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: 400)
+    }
+
+    // MARK: - Chat View
+
+    private var chatView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: IRISSpacing.md) {
+                // Show screenshot at top
+                if let screenshot = geminiService.capturedScreenshot {
+                    Image(nsImage: screenshot)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: IRISRadius.normal))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: IRISRadius.normal)
+                                .stroke(IRISColors.stroke, lineWidth: 1)
+                        )
+                        .opacity(0.6)
+                }
+
+                // Chat messages
+                ForEach(Array(geminiService.chatMessages.enumerated()), id: \.offset) { index, message in
+                    chatMessageView(message: message)
+                }
+
+                // Show live transcription while listening
+                if geminiService.isListening && !geminiService.liveTranscription.isEmpty {
+                    chatMessageView(message: ChatMessage(role: .user, content: geminiService.liveTranscription, timestamp: Date()))
+                        .opacity(0.7)
+                }
+
+                // Show processing indicator
+                if geminiService.isProcessing {
+                    HStack(spacing: IRISSpacing.sm) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: currentConfig.accentColor))
+                            .scaleEffect(0.8)
+                        Text("Thinking...")
+                            .irisStyle(.caption)
+                            .foregroundColor(IRISColors.textSecondary)
+                    }
+                    .padding(IRISSpacing.md)
+                }
+            }
+            .padding(IRISSpacing.lg)
+        }
+        .frame(maxWidth: 680, maxHeight: 500)
+    }
+
+    private func chatMessageView(message: ChatMessage) -> some View {
+        HStack(alignment: .top, spacing: IRISSpacing.sm) {
+            if message.role == .assistant {
+                Image(systemName: "sparkles")
+                    .foregroundColor(currentConfig.accentColor)
+                    .font(.system(size: 12))
+                    .padding(.top, 4)
+            }
+
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: IRISSpacing.xs) {
+                Text(message.content)
+                    .irisStyle(.body)
+                    .foregroundColor(IRISColors.textPrimary)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(message.role == .user ? .trailing : .leading)
+            }
+            .padding(IRISSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: IRISRadius.normal)
+                    .fill(message.role == .user ? Color.blue.opacity(0.2) : Color.black.opacity(0.3))
+            )
+            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+
+            if message.role == .user {
+                Image(systemName: "person.circle.fill")
+                    .foregroundColor(.blue)
+                    .font(.system(size: 12))
+                    .padding(.top, 4)
+            }
+        }
     }
 
     // MARK: - Close Button
