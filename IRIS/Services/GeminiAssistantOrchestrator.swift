@@ -7,9 +7,15 @@ import IRISMedia
 import IRISVision
 import GoogleGenerativeAI
 
+// MARK: - ICOI Services
+private let intentClassificationService = IntentClassificationService()
+private let icoiPromptBuilder = ICOIPromptBuilder()
+private let icoiResponseParser = ICOIResponseParser()
+private let clipboardService = ClipboardActionService()
+
 /// High-level orchestrator for Gemini assistant interactions
 /// Responsibility: Workflow coordination ONLY - delegates to specialized services
-public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
+public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceCommandDelegate {
     // MARK: - Published Properties
     @Published public var isListening = false
     @Published public var transcribedText = ""
@@ -20,6 +26,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
     @Published public var isProcessing = false
     @Published public var capturedScreenshot: NSImage?
     @Published public var remainingTimeout: TimeInterval? = nil
+    @Published public var parsedICOIResponse: ICOIParsedResponse?
+    @Published public var currentIntent: ICOIIntent = .general // Current classified intent for UI layout
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -60,6 +68,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         messageExtractionService: MessageExtractionService,
         screenshotService: ScreenshotService
     ) {
+        print("🚀🚀🚀 GeminiAssistantOrchestrator init() called - NEW CODE with Gemini 3.0 Flash classification!")
         self.geminiClient = geminiClient
         self.conversationManager = conversationManager
         self.voiceInteractionService = voiceInteractionService
@@ -68,6 +77,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         print("🔑 GeminiAssistantOrchestrator initialized with shared client")
         super.init()
+
+        // Set up ICOI voice command delegate
+        self.voiceInteractionService.icoiDelegate = self
     }
 
     // MARK: - Public API
@@ -157,7 +169,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self?.liveTranscription = partialText
             }
         }) { [weak self] prompt in
-            print("📥📥📥 VOICE CALLBACK FIRED - Prompt: '\(prompt)' (length: \(prompt.count))")
+            print("================================================================================")
+            print("🚨 VOICE CALLBACK ENTRY - Prompt: '\(prompt)'")
+            print("================================================================================")
 
             guard let self = self else {
                 print("⚠️ Voice callback: self is nil")
@@ -173,23 +187,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self.remainingTimeout = nil
             }
 
-            print("🔄 Setting isListening = false, isListeningForBuffers = false")
-            DispatchQueue.main.async {
-                self.isListening = false
-                self.isListeningForBuffers = false
-                self.transcribedText = prompt
-                self.liveTranscription = "" // Clear live transcription
-
-                // Replace the loading bubble with actual transcription
-                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
-                    self.chatMessages[lastIndex] = ChatMessage(role: .user, content: prompt, timestamp: Date())
-                }
-            }
-
             // Check for "stop" command to exit analysis mode
-            print("🔍 Checking if stop command...")
             if self.isStopCommand(prompt) {
-                print("🛑🛑🛑 Stop command detected, returning to indicator mode")
+                print("🛑 Stop command detected, returning to indicator mode")
                 DispatchQueue.main.async {
                     self.capturedScreenshot = nil
                     self.isProcessing = false
@@ -200,9 +200,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             }
 
             // Only process if there's actual input
-            print("🔍 Checking if prompt is empty...")
             guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                print("⚠️⚠️⚠️ No voice input detected (empty prompt) - CLOSING OVERLAY")
+                print("⚠️ No voice input detected (empty prompt) - CLOSING OVERLAY")
                 DispatchQueue.main.async {
                     self.capturedScreenshot = nil
                     self.isProcessing = false
@@ -212,9 +211,33 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 return
             }
 
-            // Send to Gemini
-            print("✅✅✅ Valid prompt received, sending to Gemini with screenshot")
+            // CRITICAL: Classify intent synchronously BEFORE showing message
+            // Use Task to await classification completion
+            NSLog("🔍🔍🔍 ABOUT TO CLASSIFY INTENT for: \"\(prompt)\"")
             Task { @MainActor in
+                NSLog("🔍 Task started, calling classifyIntent...")
+                let intentClassification = await intentClassificationService.classifyIntent(input: prompt)
+                NSLog("🔍 classifyIntent returned: \(intentClassification.intent.rawValue)")
+
+                print("✅ Intent classification completed: \(intentClassification.intent.rawValue) (confidence: \(intentClassification.confidence))")
+
+                // Now that classification is complete, update UI with BOTH intent and message
+                self.isListening = false
+                self.isListeningForBuffers = false
+                self.transcribedText = prompt
+                self.liveTranscription = ""
+
+                // Set the intent FIRST
+                self.currentIntent = intentClassification.intent
+                print("📌 Set currentIntent to: \(intentClassification.intent.rawValue)")
+
+                // Then replace the loading bubble with actual transcription
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(role: .user, content: prompt, timestamp: Date())
+                }
+
+                // Send to Gemini (already on MainActor)
+                print("✅ Valid prompt received, sending to Gemini with screenshot")
                 await self.sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: focusedElement)
             }
         }
@@ -265,6 +288,40 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         }
 
         print("🛑 Listening stopped, ready for new blink")
+    }
+
+    /// Resets the entire conversation state including history
+    /// Call this when closing the overlay to prevent context bleed between sessions
+    public func resetConversationState() {
+        print("🔄 Resetting conversation state")
+
+        // Set cooldown to prevent immediate reopening
+        self.lastBlinkTime = Date()
+        print("🛑 Set cooldown to prevent immediate reopening")
+
+        // Clear conversation history in ConversationManager
+        conversationManager.clearHistory()
+
+        // Clear all UI state
+        DispatchQueue.main.async {
+            self.chatMessages.removeAll()
+            self.geminiResponse = ""
+            self.liveGeminiResponse = ""
+            self.transcribedText = ""
+            self.liveTranscription = ""
+            self.capturedScreenshot = nil
+            self.parsedICOIResponse = nil
+            self.isProcessing = false
+            self.isListening = false
+
+            // Clear extracted messages state
+            self.extractedMessages.removeAll()
+            self.waitingForMessageSelection = false
+            self.waitingForMessageExtraction = false
+            self.currentFocusedElement = nil
+        }
+
+        print("✅ Conversation state reset complete")
     }
 
     // MARK: - Private Methods
@@ -325,8 +382,17 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             return
         }
 
-        // Build prompt with context
-        let fullPrompt = buildPrompt(actualPrompt: actualPrompt, focusedElement: focusedElement)
+        // Use the already-classified intent (from transcription completion) and build specialized ICOI prompt
+        let currentIntentValue = await MainActor.run { self.currentIntent }
+        let fullPrompt: String
+
+        if currentIntentValue != .general {
+            print("🎯 Using ICOI intent: \(currentIntentValue.rawValue)")
+            fullPrompt = icoiPromptBuilder.buildPrompt(for: currentIntentValue, userRequest: actualPrompt, focusedElement: focusedElement)
+        } else {
+            print("📝 Using general prompt")
+            fullPrompt = buildPrompt(actualPrompt: actualPrompt, focusedElement: focusedElement)
+        }
 
         // Convert base64 string to Data
         guard let imageData = Data(base64Encoded: base64Image) else {
@@ -386,7 +452,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 await handleMessageExtraction(responseText: responseText)
             } else {
                 print("💬 Handling normal response...")
-                await handleNormalResponse(responseText: responseText)
+                let currentIntentValue = await MainActor.run { self.currentIntent }
+                let intentClassification = IntentClassification(intent: currentIntentValue, confidence: currentIntentValue == .general ? 0.0 : 0.9)
+                await handleNormalResponse(responseText: responseText, intentClassification: intentClassification)
             }
 
         } catch {
@@ -437,6 +505,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         // Handle message selection
         var actualPrompt = prompt
 
+        // Classify intent for follow-up requests using Gemini Flash
+        let intentClassification = await intentClassificationService.classifyIntent(input: prompt)
+
         if waitingForMessageSelection && sentimentAnalysisService.detectsMessageNumber(in: prompt) == nil {
             waitingForMessageSelection = false
             extractedMessages.removeAll()
@@ -484,7 +555,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             if waitingForMessageExtraction {
                 await handleMessageExtraction(responseText: responseText)
             } else {
-                await handleNormalResponse(responseText: responseText)
+                await handleNormalResponse(responseText: responseText, intentClassification: intentClassification)
             }
 
         } catch {
@@ -555,41 +626,55 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         fullPrompt += """
 
 
+        🎯 CRITICAL USER IDENTITY RULES (MESSAGING APPS):
+        The USER you are helping is ALWAYS on the RIGHT side of the screen.
+
+        VISUAL IDENTIFICATION:
+        - RIGHT side (blue/green bubbles, right-aligned) = THE USER (person you're helping)
+        - LEFT side (gray/white bubbles, left-aligned) = THE OTHER PERSON (who sent messages to the user)
+
+        PERSPECTIVE RULES:
+        - The USER wants help with THEIR OWN situation and context
+        - When the USER asks about sentiment/tone, they mean: "How should I interpret what the OTHER PERSON sent me?"
+        - When the USER asks "what should I reply?", they want suggestions for what THEY should write back
+        - When the USER asks about a message, they're asking about what was sent TO THEM (from the left side)
+        - The conversation is about the USER's life, work, relationships - NOT third-party stories
+
+        🎯 CONTEXT FOCUS:
+        - This is ALWAYS about the USER's personal context
+        - The USER is seeking help understanding/responding to THEIR OWN conversations
+        - Focus on the USER's perspective and circumstances
+        - Do NOT discuss third-party situations unless the OTHER PERSON explicitly mentioned them
+        - All analysis should be from the USER's point of view
+
+        MESSAGE IDENTIFICATION:
+        - Messages on RIGHT = sent BY THE USER (what they already wrote)
+        - Messages on LEFT = received FROM THE OTHER PERSON (what they need to respond to)
+        - When analyzing sentiment: analyze what the OTHER PERSON (left side) is expressing TO the USER
+        - When suggesting replies: suggest what the USER (right side) should write back
+
         IMPORTANT CONTEXT UNDERSTANDING:
         - Focus on the area the user is looking at (specified above)
         - Answer ANY question ABOUT that area (sentiment, meaning, what to reply, summary, etc.)
-
-        MESSAGING APP RULES (WhatsApp, Telegram, iMessage, etc.):
-        - Messages on the RIGHT side = sent BY THE USER (they wrote these)
-        - Messages on the LEFT side = received FROM OTHERS (someone else wrote these)
-        - Green/blue bubbles on right = USER's messages
-        - Gray/white bubbles on left = OTHER PERSON's messages
-        - Right-aligned text = USER sent it
-        - Left-aligned text = OTHER PERSON sent it
-        - When user asks "what should I reply/answer/say", they want YOU to suggest what THEY should write back
-        - Context: The user can see the conversation but wants help composing a response
+        - ALL questions should be answered from the USER's perspective
 
         VALID QUESTION TYPES (ALL are acceptable and should be answered):
-        - "What does this say?" / "What am I looking at?"
-        - "What should I reply?" / "How should I respond?"
-        - "What's the sentiment?" / "How does this feel?" / "What's the tone?"
-        - "Summarize this" / "Explain this" / "What does this mean?"
-        - ANY question about content, emotions, meaning, or suggestions related to the focused area
-
-        OTHER IMPORTANT RULES:
-        - The user is asking about what THEY should do/say/write, not explaining what others said
-        - Use the content at the specified coordinates to answer their question
-        - If looking at a message thread, identify who sent each message based on alignment
+        - "What does this say?" → Describe what the OTHER PERSON sent to the USER
+        - "What should I reply?" → Suggest what the USER should write back
+        - "What's the sentiment?" → Analyze what the OTHER PERSON is expressing to the USER
+        - "Summarize this" → Summarize the conversation from the USER's perspective
+        - ANY question about content, emotions, meaning, or suggestions related to the USER's context
 
         User's voice request: "\(actualPrompt.isEmpty ? "What am I looking at?" : actualPrompt)"
 
         Response guidelines:
         - Be brief and actionable (2-3 sentences unless asked for more)
         - Use plain text only - NO markdown, NO asterisks, NO formatting symbols
-        - Understand the user's intent from context (e.g., if they ask about replying, suggest what they should say)
-        - Focus on being helpful for their next action
-        - Answer questions ABOUT the focused area - ALL questions are valid
-        - In chats: Always correctly identify message alignment (left=received, right=sent)
+        - ALWAYS respond from the USER's perspective (right side)
+        - When analyzing messages, analyze what was sent TO the USER (from left side)
+        - When suggesting replies, suggest what the USER should send (from right side)
+        - Focus on the USER's personal situation and context
+        - In chats: RIGHT = USER, LEFT = OTHER PERSON (this is absolute and never changes)
         """
 
         return fullPrompt
@@ -600,11 +685,20 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         guard messageExtractionService.isValidMessageNumber(messageNumber, totalMessages: extractedMessages.count) else {
             await MainActor.run {
-                self.chatMessages.append(ChatMessage(
-                    role: .assistant,
-                    content: "Invalid message number. Please choose between 1 and \(self.extractedMessages.count).",
-                    timestamp: Date()
-                ))
+                // Replace loading bubble with error message
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(
+                        role: .assistant,
+                        content: "Invalid message number. Please choose between 1 and \(self.extractedMessages.count).",
+                        timestamp: Date()
+                    )
+                } else {
+                    self.chatMessages.append(ChatMessage(
+                        role: .assistant,
+                        content: "Invalid message number. Please choose between 1 and \(self.extractedMessages.count).",
+                        timestamp: Date()
+                    ))
+                }
                 self.isProcessing = false
             }
             return
@@ -612,26 +706,76 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
 
         let selectedMessageText = extractedMessages[messageNumber - 1]
 
+        // Filter out timestamps from the message text
+        let filteredMessage = filterTimestamps(from: selectedMessageText)
+
         do {
-            let analysis = try await sentimentAnalysisService.analyzeSentiment(selectedMessageText)
+            let analysis = try await sentimentAnalysisService.analyzeSentiment(filteredMessage)
 
             await MainActor.run {
-                self.chatMessages.append(ChatMessage(role: .assistant, content: analysis.analysis, timestamp: Date()))
+                // Replace loading bubble with analysis result
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(
+                        role: .assistant,
+                        content: analysis.analysis,
+                        timestamp: Date()
+                    )
+                } else {
+                    self.chatMessages.append(ChatMessage(role: .assistant, content: analysis.analysis, timestamp: Date()))
+                }
                 self.isProcessing = false
             }
 
             startListeningForFollowup()
         } catch {
             await MainActor.run {
-                self.chatMessages.append(ChatMessage(
-                    role: .assistant,
-                    content: "Failed to analyze sentiment: \(error.localizedDescription)",
-                    timestamp: Date()
-                ))
+                // Replace loading bubble with error message
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(
+                        role: .assistant,
+                        content: "Failed to analyze sentiment: \(error.localizedDescription)",
+                        timestamp: Date()
+                    )
+                } else {
+                    self.chatMessages.append(ChatMessage(
+                        role: .assistant,
+                        content: "Failed to analyze sentiment: \(error.localizedDescription)",
+                        timestamp: Date()
+                    ))
+                }
                 self.isProcessing = false
             }
             startListeningForFollowup()
         }
+    }
+
+    /// Filters out timestamps from message text (e.g., "10:30 AM", "14:25", etc.)
+    private func filterTimestamps(from text: String) -> String {
+        var filtered = text
+
+        // Remove common timestamp patterns
+        // Pattern 1: HH:MM AM/PM (e.g., "10:30 AM", "2:45 PM")
+        filtered = filtered.replacingOccurrences(
+            of: #"\b\d{1,2}:\d{2}\s*[AP]M\b"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        // Pattern 2: 24-hour format (e.g., "14:25", "09:30")
+        filtered = filtered.replacingOccurrences(
+            of: #"\b\d{1,2}:\d{2}\b"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        // Clean up multiple spaces
+        filtered = filtered.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        )
+
+        return filtered.trimmingCharacters(in: .whitespaces)
     }
 
     private func handleMessageExtraction(responseText: String) async {
@@ -687,21 +831,45 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         }
     }
 
-    private func handleNormalResponse(responseText: String) async {
-        await MainActor.run {
-            self.geminiResponse = responseText
-            self.isProcessing = false
+    private func handleNormalResponse(responseText: String, intentClassification: IntentClassification) async {
+        // Parse ICOI responses for specialized intents
+        if intentClassification.intent != .general && intentClassification.confidence >= 0.3 {
+            let parsedResponse = icoiResponseParser.parse(responseText: responseText, intent: intentClassification.intent)
 
-            // Replace the assistant loading bubble with actual response
-            if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
-                self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: responseText, timestamp: Date())
-            } else {
-                // Fallback: add new message if loading bubble not found
-                self.chatMessages.append(ChatMessage(role: .assistant, content: responseText, timestamp: Date()))
+            await MainActor.run {
+                self.geminiResponse = responseText
+                self.isProcessing = false
+
+                // Replace the assistant loading bubble with actual response
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: responseText, timestamp: Date())
+                } else {
+                    // Fallback: add new message if loading bubble not found
+                    self.chatMessages.append(ChatMessage(role: .assistant, content: responseText, timestamp: Date()))
+                }
+
+                // Store parsed ICOI response for UI components
+                self.parsedICOIResponse = parsedResponse
             }
+
+            print("✅ ICOI response parsed - Intent: \(intentClassification.intent.rawValue), Options: \(parsedResponse.hasOptions), Code: \(parsedResponse.hasCodeBlock)")
+        } else {
+            await MainActor.run {
+                self.geminiResponse = responseText
+                self.isProcessing = false
+
+                // Replace the assistant loading bubble with actual response
+                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                    self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: responseText, timestamp: Date())
+                } else {
+                    // Fallback: add new message if loading bubble not found
+                    self.chatMessages.append(ChatMessage(role: .assistant, content: responseText, timestamp: Date()))
+                }
+            }
+
+            print("✅ Gemini response received")
         }
 
-        print("✅ Gemini response received")
         startListeningForFollowup()
     }
 
@@ -825,5 +993,87 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             self?.timeoutStartTime = nil
             self?.remainingTimeout = nil
         }
+    }
+
+    // MARK: - ICOIVoiceCommandDelegate
+    public func didReceiveICOICommand(_ command: ICOIVoiceCommand) {
+        print("🎯 Handling ICOI voice command: \(command)")
+
+        Task { @MainActor in
+            switch command {
+            case .useOption(let number):
+                if let response = self.parsedICOIResponse,
+                   let option = response.numberedOptions.first(where: { $0.number == number }) {
+                    // Simulate selecting the option by copying and using it
+                    clipboardService.copyOptionContent(option.content)
+                    // Could also trigger additional actions here
+                }
+
+            case .copyOption(let number):
+                if let response = self.parsedICOIResponse,
+                   let option = response.numberedOptions.first(where: { $0.number == number }) {
+                    clipboardService.copyOptionContent(option.content)
+                }
+
+            case .copyCode:
+                if let response = self.parsedICOIResponse,
+                   let codeBlock = response.codeBlock {
+                    clipboardService.copyCodeBlock(language: codeBlock.language, code: codeBlock.code)
+                }
+
+            case .exportSummary:
+                if let response = self.parsedICOIResponse {
+                    let markdown = generateMarkdown(from: response)
+                    do {
+                        try await clipboardService.exportToFile(content: markdown, suggestedName: "icoi-summary", fileExtension: "md")
+                    } catch {
+                        print("Failed to export ICOI response: \(error)")
+                    }
+                }
+
+            case .showMore:
+                // Could expand collapsed sections in UI
+                print("Show more command received - UI expansion not implemented yet")
+            }
+        }
+    }
+
+    /// Generates markdown representation of ICOI response
+    private func generateMarkdown(from response: ICOIParsedResponse) -> String {
+        var markdown = ""
+
+        for element in response.elements {
+            switch element {
+            case .heading(let level, let text):
+                let prefix = String(repeating: "#", count: level)
+                markdown += "\(prefix) \(text)\n\n"
+
+            case .paragraph(let text):
+                markdown += "\(text)\n\n"
+
+            case .bulletList(let items):
+                for item in items {
+                    markdown += "- \(item)\n"
+                }
+                markdown += "\n"
+
+            case .numberedOption(let number, let title, let content):
+                markdown += "\(number). **\(title)**\n"
+                if !content.isEmpty {
+                    markdown += "\(content)\n"
+                }
+                markdown += "\n"
+
+            case .codeBlock(let language, let code):
+                markdown += "```\(language)\n\(code)\n```\n\n"
+
+            case .actionItem(let text, let assignee, let completed):
+                let checkbox = completed ? "[x]" : "[ ]"
+                let assigneeText = assignee.map { " (\($0))" } ?? ""
+                markdown += "- \(checkbox) \(text)\(assigneeText)\n"
+            }
+        }
+
+        return markdown.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

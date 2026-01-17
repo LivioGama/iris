@@ -6,6 +6,9 @@ import IRISNetwork
 struct OverlayView: View {
     @EnvironmentObject var coordinator: IRISCoordinator
 
+    // Debug flag - set to true to show debug overlays
+    private let showDebugOverlays = false
+
     var body: some View {
         ZStack {
             // Transparent background - never captures clicks
@@ -26,18 +29,20 @@ struct OverlayView: View {
                 .allowsHitTesting(false)
             }
 
-            VStack {
-                Text(coordinator.gazeDebugInfo)
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
-                    .foregroundColor(.yellow)
-                    .padding(12)
-                    .background(Color.black.opacity(0.85))
-                    .cornerRadius(10)
+            if showDebugOverlays {
+                VStack {
+                    Text(coordinator.gazeDebugInfo)
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .foregroundColor(.yellow)
+                        .padding(12)
+                        .background(Color.black.opacity(0.85))
+                        .cornerRadius(10)
 
-                Spacer()
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .allowsHitTesting(false)
             }
-            .padding(.top, 50)
-            .allowsHitTesting(false)
 
             if coordinator.currentState == .processing {
                 ProcessingIndicator()
@@ -53,15 +58,17 @@ struct OverlayView: View {
             // Only the Gemini overlay should accept hits when active
             GeminiResponseOverlay(geminiService: coordinator.geminiAssistant)
 
-            VStack {
-                Spacer()
-                HStack {
-                    DebugMini(coordinator: coordinator)
+            if showDebugOverlays {
+                VStack {
                     Spacer()
+                    HStack {
+                        DebugMini(coordinator: coordinator)
+                        Spacer()
+                    }
+                    .padding(20)
                 }
-                .padding(20)
+                .allowsHitTesting(false)
             }
-            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

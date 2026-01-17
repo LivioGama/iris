@@ -60,8 +60,6 @@ struct GeminiResponseOverlay: View {
             }
 
             VStack {
-                Spacer()
-
                 if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil {
                     mainContentView
                         .allowsHitTesting(true)
@@ -71,6 +69,7 @@ struct GeminiResponseOverlay: View {
                         .onDisappear {
                             print("👁️ Overlay disappeared - isListening: \(geminiService.isListening), isProcessing: \(geminiService.isProcessing), messages: \(geminiService.chatMessages.count)")
                         }
+                        .padding(.top, 40)
                 }
 
                 Spacer()
@@ -80,14 +79,15 @@ struct GeminiResponseOverlay: View {
     }
 
     private var mainContentView: some View {
-        // Single unified overlay container
+        // Single unified overlay container with intent-based layout
         HStack(alignment: .top, spacing: 20) {
-            // Left side: Screenshot preview
-            if let screenshot = geminiService.capturedScreenshot {
+            // Left side: Screenshot preview (hidden for code improvement with comparison)
+            if let screenshot = geminiService.capturedScreenshot,
+               !(geminiService.currentIntent == .codeImprovement && geminiService.parsedICOIResponse?.hasCodeComparison == true) {
                 Image(nsImage: screenshot)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 500, maxHeight: 700)
+                    .frame(maxWidth: 500, maxHeight: 800)
                     .clipped()
             }
 
@@ -132,6 +132,29 @@ struct GeminiResponseOverlay: View {
                     }
                 }
 
+                // Intent classification indicator - only show for non-general intents
+                if geminiService.currentIntent != .general && !geminiService.chatMessages.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: intentIcon(for: geminiService.currentIntent))
+                            .font(.system(size: 11))
+                            .foregroundColor(intentColor(for: geminiService.currentIntent))
+
+                        Text(intentLabel(for: geminiService.currentIntent))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(intentColor(for: geminiService.currentIntent).opacity(0.2))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(intentColor(for: geminiService.currentIntent).opacity(0.4), lineWidth: 1)
+                    )
+                }
+
                 // Chat messages
                 if !geminiService.chatMessages.isEmpty {
                     ScrollViewReader { proxy in
@@ -165,12 +188,13 @@ struct GeminiResponseOverlay: View {
 
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: 700)
+            .frame(maxWidth: 700, maxHeight: 800)
             .padding(.top, 24)
             .padding(.trailing, 24)
             .padding(.bottom, 24)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: 800)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.9))
@@ -349,19 +373,66 @@ struct GeminiResponseOverlay: View {
     private func closeResponse() {
         print("❌ Closing response overlay")
 
-        // Clear chat first to prevent follow-up listener from starting
-        geminiService.chatMessages.removeAll()
-
-        // Stop listening to clear flags
+        // Stop listening first to prevent new interactions
         geminiService.stopListening()
 
-        withAnimation {
-            geminiService.geminiResponse = ""
-            geminiService.transcribedText = ""
-            geminiService.capturedScreenshot = nil
-        }
+        // Reset entire conversation state including history to prevent context bleed
+        geminiService.resetConversationState()
 
-        print("✅ Response overlay closed, ready for new blink")
+        print("✅ Response overlay closed and conversation reset, ready for new blink")
+    }
+
+    // MARK: - Intent Helpers
+
+    private func intentIcon(for intent: ICOIIntent) -> String {
+        switch intent {
+        case .messageReply:
+            return "bubble.left.and.bubble.right.fill"
+        case .codeImprovement:
+            return "chevron.left.forwardslash.chevron.right"
+        case .summarize:
+            return "doc.text.fill"
+        case .toneFeedback:
+            return "text.quote"
+        case .chartAnalysis:
+            return "chart.bar.fill"
+        case .general:
+            return "sparkles"
+        }
+    }
+
+    private func intentColor(for intent: ICOIIntent) -> Color {
+        switch intent {
+        case .messageReply:
+            return .blue
+        case .codeImprovement:
+            return .green
+        case .summarize:
+            return .purple
+        case .toneFeedback:
+            return .orange
+        case .chartAnalysis:
+            return .cyan
+        case .general:
+            return .gray
+        }
+    }
+
+    private func intentLabel(for intent: ICOIIntent) -> String {
+        switch intent {
+        case .messageReply:
+            return "Message Reply"
+        case .codeImprovement:
+            return "Code Improvement"
+        case .summarize:
+            return "Summarize"
+        case .toneFeedback:
+            return "Tone Feedback"
+        case .chartAnalysis:
+            return "Chart Analysis"
+        case .general:
+            return "General"
+        }
     }
 }
 
@@ -378,6 +449,59 @@ struct ChatMessageView: View {
         !messageItems.isEmpty
     }
 
+    // MARK: - Intent Helpers
+
+    private func intentIcon(for intent: ICOIIntent) -> String {
+        switch intent {
+        case .messageReply:
+            return "bubble.left.and.bubble.right.fill"
+        case .codeImprovement:
+            return "chevron.left.forwardslash.chevron.right"
+        case .summarize:
+            return "doc.text.fill"
+        case .toneFeedback:
+            return "text.quote"
+        case .chartAnalysis:
+            return "chart.bar.fill"
+        case .general:
+            return "sparkles"
+        }
+    }
+
+    private func intentColor(for intent: ICOIIntent) -> Color {
+        switch intent {
+        case .messageReply:
+            return .blue
+        case .codeImprovement:
+            return .green
+        case .summarize:
+            return .purple
+        case .toneFeedback:
+            return .orange
+        case .chartAnalysis:
+            return .cyan
+        case .general:
+            return .gray
+        }
+    }
+
+    private func intentLabel(for intent: ICOIIntent) -> String {
+        switch intent {
+        case .messageReply:
+            return "Message Reply"
+        case .codeImprovement:
+            return "Code Improvement"
+        case .summarize:
+            return "Summarize"
+        case .toneFeedback:
+            return "Tone Feedback"
+        case .chartAnalysis:
+            return "Chart Analysis"
+        case .general:
+            return "General"
+        }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             // Icon for user or assistant
@@ -387,9 +511,34 @@ struct ChatMessageView: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(message.role == .user ? "You" : "Gemini")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.6))
+                HStack(spacing: 8) {
+                    Text(message.role == .user ? "You" : "Gemini")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.6))
+
+                    // Show intent badge next to user messages
+                    if message.role == .user && geminiService.currentIntent != .general {
+                        HStack(spacing: 4) {
+                            Image(systemName: intentIcon(for: geminiService.currentIntent))
+                                .font(.system(size: 9))
+                                .foregroundColor(intentColor(for: geminiService.currentIntent))
+
+                            Text(intentLabel(for: geminiService.currentIntent))
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(intentColor(for: geminiService.currentIntent).opacity(0.2))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(intentColor(for: geminiService.currentIntent).opacity(0.4), lineWidth: 0.5)
+                        )
+                    }
+                }
 
                 // Show loading indicator for "..." content, or live streaming text
                 if message.content == "..." {
@@ -410,6 +559,32 @@ struct ChatMessageView: View {
                         LoadingDotsView()
                             .padding(.top, 4)
                     }
+                } else if let icoiResponse = geminiService.parsedICOIResponse, message.role == .assistant {
+                    // Render ICOI components with intent-based layout
+                    ICOIResponseContentView(
+                        parsedResponse: icoiResponse,
+                        currentIntent: geminiService.currentIntent,
+                        onOptionSelected: { number in
+                            // Use voice command simulation for option selection
+                            Task {
+                                await geminiService.sendTextOnlyToGemini(prompt: "use option \(number)")
+                            }
+                        },
+                        onOptionCopied: { number, content in
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(content, forType: .string)
+                        },
+                        onCodeCopied: { language, code in
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(code, forType: .string)
+                        },
+                        onExport: {
+                            // Export structured summary as markdown
+                            let markdown = generateMarkdown(from: icoiResponse)
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(markdown, forType: .string)
+                        }
+                    )
                 } else if hasNumberedList && message.role == .assistant {
                     // Show header text if any (before the numbered list)
                     if let headerText = extractHeaderText(from: message.content) {
@@ -565,6 +740,152 @@ struct ChatMessageView: View {
 }
 
 // Loading dots animation view
+/// View for rendering ICOI structured responses with interactive components
+struct ICOIResponseContentView: View {
+    let parsedResponse: ICOIParsedResponse
+    let currentIntent: ICOIIntent
+    let onOptionSelected: (Int) -> Void
+    let onOptionCopied: (Int, String) -> Void
+    let onCodeCopied: (String, String) -> Void
+    let onExport: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Intent-specific layouts
+            switch currentIntent {
+            case .codeImprovement:
+                renderCodeImprovementLayout()
+
+            case .messageReply:
+                renderMessageReplyLayout()
+
+            default:
+                renderDefaultLayout()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func renderCodeImprovementLayout() -> some View {
+        // Code comparison view for code improvement intent
+        if parsedResponse.hasCodeComparison,
+           let newCode = parsedResponse.newCode {
+            CodeComparisonView(
+                oldCode: parsedResponse.oldCode ?? "// Original code from screenshot",
+                newCode: newCode,
+                language: parsedResponse.codeLanguage ?? "text",
+                improvements: parsedResponse.improvements,
+                onCopyNew: {
+                    onCodeCopied(parsedResponse.codeLanguage ?? "text", newCode)
+                }
+            )
+        } else {
+            // Fallback to default layout if code comparison not available
+            renderDefaultLayout()
+        }
+    }
+
+    @ViewBuilder
+    private func renderMessageReplyLayout() -> some View {
+        // Bubble-style layout for message reply intent
+        if parsedResponse.hasOptions {
+            MessageBubbleView(
+                options: parsedResponse.numberedOptions,
+                onOptionSelected: onOptionSelected,
+                onOptionCopied: { number in
+                    if let option = parsedResponse.numberedOptions.first(where: { $0.number == number }) {
+                        onOptionCopied(number, option.content)
+                    }
+                }
+            )
+        } else {
+            // Fallback to default layout if no options
+            renderDefaultLayout()
+        }
+    }
+
+    @ViewBuilder
+    private func renderDefaultLayout() -> some View {
+        // Render numbered options if present
+        if parsedResponse.hasOptions {
+            OptionSelectionView(
+                options: parsedResponse.numberedOptions,
+                onOptionSelected: onOptionSelected,
+                onOptionCopied: { number in
+                    if let option = parsedResponse.numberedOptions.first(where: { $0.number == number }) {
+                        onOptionCopied(number, option.content)
+                    }
+                }
+            )
+        }
+
+        // Render code block if present
+        if parsedResponse.hasCodeBlock, let codeBlock = parsedResponse.codeBlock {
+            CodeBlockView(
+                language: codeBlock.language,
+                code: codeBlock.code,
+                onCopy: {
+                    onCodeCopied(codeBlock.language, codeBlock.code)
+                }
+            )
+        }
+
+        // Render structured summary for other elements
+        if !parsedResponse.elements.isEmpty {
+            StructuredSummaryView(
+                elements: parsedResponse.elements,
+                    onExport: {
+                        // Export functionality is handled in the orchestrator via voice commands
+                        // For now, just copy to clipboard as markdown
+                        let markdown = generateMarkdown(from: parsedResponse)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(markdown, forType: .string)
+                        onExport()
+                    }
+            )
+        }
+    }
+}
+
+/// Generates markdown from ICOI parsed response for export
+private func generateMarkdown(from response: ICOIParsedResponse) -> String {
+    var markdown = ""
+
+    for element in response.elements {
+        switch element {
+        case .heading(let level, let text):
+            let prefix = String(repeating: "#", count: level)
+            markdown += "\(prefix) \(text)\n\n"
+
+        case .paragraph(let text):
+            markdown += "\(text)\n\n"
+
+        case .bulletList(let items):
+            for item in items {
+                markdown += "- \(item)\n"
+            }
+            markdown += "\n"
+
+        case .numberedOption(let number, let title, let content):
+            markdown += "\(number). **\(title)**\n"
+            if !content.isEmpty {
+                markdown += "\(content)\n"
+            }
+            markdown += "\n"
+
+        case .codeBlock(let language, let code):
+            markdown += "```\(language)\n\(code)\n```\n\n"
+
+        case .actionItem(let text, let assignee, let completed):
+            let checkbox = completed ? "[x]" : "[ ]"
+            let assigneeText = assignee.map { " (\($0))" } ?? ""
+            markdown += "- \(checkbox) \(text)\(assigneeText)\n"
+        }
+    }
+
+    return markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 struct LoadingDotsView: View {
     @State private var animationPhase = 0
 

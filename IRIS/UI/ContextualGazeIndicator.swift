@@ -7,7 +7,7 @@ struct ContextualGazeIndicator: View {
 
     // Enable Metal rendering for maximum performance (120 FPS capable)
     // Set to false to use SwiftUI renderer (60 FPS)
-    private let useMetalRenderer = true
+    private let useMetalRenderer = false // Disabled Metal - using SwiftUI for reliability
 
     var body: some View {
         ZStack {
@@ -44,10 +44,6 @@ struct DetectedElementView: View {
                 .stroke(elementTypeColor(for: element.type), lineWidth: 3)
                 .frame(width: element.bounds.width, height: element.bounds.height)
                 .position(x: element.bounds.midX, y: element.bounds.midY)
-
-            // Element label above the rectangle
-            ElementLabelView(element: element)
-                .position(x: element.bounds.midX, y: element.bounds.minY - 20)
         }
     }
 

@@ -33,8 +33,6 @@ public struct GeminiAnalysisResponse: Codable {
 public class SentimentAnalysisService {
     public static let shared = SentimentAnalysisService()
 
-    private let apiKey: String
-
     // System and analysis prompts
     private let systemPrompt = "You are an expert in behavioral analysis. Provide concise and insightful responses in 3-4 sentences maximum."
 
@@ -47,11 +45,19 @@ public class SentimentAnalysisService {
     """
 
     public init() {
-        // Get API key from environment variable
-        self.apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+    }
+
+    private func getAPIKey() -> String {
+        // Try UserDefaults first
+        if let key = UserDefaults.standard.string(forKey: "GEMINI_API_KEY"), !key.isEmpty {
+            return key
+        }
+        // Fall back to environment variable
+        return ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
     }
 
     public func analyzeSentiment(_ text: String) async throws -> SentimentAnalysisResponse {
+        let apiKey = getAPIKey()
         guard !apiKey.isEmpty else {
             throw NSError(domain: "SentimentAnalysis", code: -1, userInfo: [NSLocalizedDescriptionKey: "GEMINI_API_KEY not set"])
         }
@@ -70,7 +76,7 @@ public class SentimentAnalysisService {
             ]
         )
 
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=\(apiKey)")!
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=\(apiKey)")!
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -98,20 +104,24 @@ public class SentimentAnalysisService {
 
     public func detectsSentimentRequest(in prompt: String) -> Bool {
         let lowercased = prompt.lowercased()
-        let sentimentKeywords = [
-            "judge",
-            "analyze",
-            "sentiment",
-            "personality",
-            "who said",
-            "who wrote",
-            "messages",
+
+        // Very specific patterns for sentiment analysis requests only
+        let sentimentPhrases = [
+            "judge the sentiment",
+            "analyze the sentiment",
+            "analyze sentiment",
+            "what's the sentiment",
+            "check sentiment",
+            "sentiment analysis",
+            "who said what",
+            "who wrote what",
             "extract messages",
-            "list messages"
+            "list messages",
+            "show messages"
         ]
 
-        return sentimentKeywords.contains { keyword in
-            lowercased.contains(keyword)
+        return sentimentPhrases.contains { phrase in
+            lowercased.contains(phrase)
         }
     }
 

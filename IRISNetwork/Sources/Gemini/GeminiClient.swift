@@ -10,12 +10,12 @@ public class GeminiClient {
 
     public init(apiKey: String) {
         self.apiKey = apiKey
-        self.model = GenerativeModel(name: "gemini-2.0-flash-exp", apiKey: apiKey)
+        self.model = GenerativeModel(name: "gemini-3-flash-preview", apiKey: apiKey)
     }
 
     public func updateAPIKey(_ newKey: String) {
         self.apiKey = newKey
-        self.model = GenerativeModel(name: "gemini-2.0-flash-exp", apiKey: newKey)
+        self.model = GenerativeModel(name: "gemini-3-flash-preview", apiKey: newKey)
     }
 
     /// Sends a request with conversation history and returns complete response

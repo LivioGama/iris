@@ -5,6 +5,19 @@ import Atomics
 import IRISCore
 import IRISVision
 
+extension String {
+    func appendLine(to path: String) throws {
+        let line = self + "\n"
+        if let fileHandle = FileHandle(forWritingAtPath: path) {
+            fileHandle.seekToEndOfFile()
+            fileHandle.write(line.data(using: .utf8)!)
+            fileHandle.closeFile()
+        } else {
+            try line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
 public enum CalibrationCorner: String {
     case none, topLeft, topRight, bottomLeft, bottomRight, center, done
 }
@@ -309,11 +322,24 @@ public class GazeEstimator: ObservableObject {
     }
 
     public func start() {
-        guard !processManager.isRunning else { return }
+        try? "🎯 GazeEstimator.start() called".appendLine(to: "/tmp/iris_startup.log")
+
+        guard !processManager.isRunning else {
+            try? "⚠️ Process manager already running".appendLine(to: "/tmp/iris_startup.log")
+            return
+        }
+
+        // Log environment info
+        let envInfo = IRISCore.PathResolver.getEnvironmentInfo()
+        for (key, value) in envInfo {
+            try? "\(key): \(value)".appendLine(to: "/tmp/iris_startup.log")
+        }
 
         let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let screenWidth = Int(screen.width)
         let screenHeight = Int(screen.height)
+
+        try? "📐 Screen: \(screenWidth)x\(screenHeight)".appendLine(to: "/tmp/iris_startup.log")
 
         let arguments = [
             "--eye", dominantEye.rawValue,
@@ -321,9 +347,14 @@ public class GazeEstimator: ObservableObject {
             String(screenHeight)
         ]
 
+        try? "🐍 Starting Python with args: \(arguments)".appendLine(to: "/tmp/iris_startup.log")
+
         do {
             try processManager.start(arguments: arguments)
+            try? "✅ Process manager started".appendLine(to: "/tmp/iris_startup.log")
         } catch {
+            let errMsg = "❌ GazeEstimator failed: \(error.localizedDescription)"
+            try? errMsg.appendLine(to: "/tmp/iris_startup.log")
             Task { @MainActor in
                 self.debugInfo = "Failed: \(error.localizedDescription)"
             }

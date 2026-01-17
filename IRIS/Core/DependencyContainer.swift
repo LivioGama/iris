@@ -64,33 +64,48 @@ class DependencyContainer {
 
     // Network Services
     private(set) lazy var geminiClient: GeminiClient = {
-        // Try to get API key from environment variable first
-        var apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        // Priority order for API key:
+        // 1. UserDefaults (persistent storage)
+        // 2. Environment variable
+        // 3. .zshrc file
 
-        // If not found, try to load from .zshrc
-        if apiKey.isEmpty {
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let zshrcPath = "\(homeDir)/.zshrc"
+        var apiKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
 
-            if let zshrcContent = try? String(contentsOfFile: zshrcPath, encoding: .utf8) {
-                // Parse GEMINI_API_KEY from .zshrc
-                let lines = zshrcContent.components(separatedBy: .newlines)
-                for line in lines {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    // Match: export GEMINI_API_KEY="..." or export GEMINI_API_KEY='...'
-                    if trimmed.hasPrefix("export GEMINI_API_KEY=") {
-                        let keyValue = trimmed.replacingOccurrences(of: "export GEMINI_API_KEY=", with: "")
-                        // Remove quotes
-                        apiKey = keyValue.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                        print("🔑 Loaded GEMINI_API_KEY from .zshrc")
-                        break
-                    }
+        if !apiKey.isEmpty {
+            print("🔑 Loaded GEMINI_API_KEY from UserDefaults")
+            return GeminiClient(apiKey: apiKey)
+        }
+
+        // Try environment variable
+        apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        if !apiKey.isEmpty {
+            print("🔑 Loaded GEMINI_API_KEY from environment")
+            // Save to UserDefaults for future launches
+            UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
+            return GeminiClient(apiKey: apiKey)
+        }
+
+        // Try .zshrc as fallback
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let zshrcPath = "\(homeDir)/.zshrc"
+
+        if let zshrcContent = try? String(contentsOfFile: zshrcPath, encoding: .utf8) {
+            let lines = zshrcContent.components(separatedBy: .newlines)
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("export GEMINI_API_KEY=") {
+                    let keyValue = trimmed.replacingOccurrences(of: "export GEMINI_API_KEY=", with: "")
+                    apiKey = keyValue.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                    print("🔑 Loaded GEMINI_API_KEY from .zshrc")
+                    // Save to UserDefaults for future launches
+                    UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
+                    break
                 }
             }
         }
 
         if apiKey.isEmpty {
-            print("⚠️ GEMINI_API_KEY not found in environment or .zshrc")
+            print("⚠️ GEMINI_API_KEY not found - user will need to enter it")
         }
 
         return GeminiClient(apiKey: apiKey)
@@ -196,11 +211,22 @@ class DependencyContainer {
 
     // MARK: - API Key Management
 
-    /// Reloads the API key from environment variable and updates the Gemini client
-    func reloadAPIKey() {
-        let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+    /// Saves the API key to UserDefaults and updates the Gemini client
+    func saveAPIKey(_ apiKey: String) {
+        UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
         geminiClient.updateAPIKey(apiKey)
-        print("🔑 API Key reloaded from environment variable")
+        print("🔑 API Key saved and updated")
+    }
+
+    /// Gets the current API key from UserDefaults
+    func getAPIKey() -> String? {
+        return UserDefaults.standard.string(forKey: "GEMINI_API_KEY")
+    }
+
+    /// Checks if API key is configured
+    func hasAPIKey() -> Bool {
+        guard let key = getAPIKey() else { return false }
+        return !key.isEmpty
     }
 
     // MARK: - Testing Support

@@ -2,6 +2,20 @@ import Foundation
 import Speech
 import AVFoundation
 
+/// Delegate protocol for ICOI voice command actions
+public protocol ICOIVoiceCommandDelegate: AnyObject {
+    func didReceiveICOICommand(_ command: ICOIVoiceCommand)
+}
+
+/// ICOI voice commands that can be triggered by voice
+public enum ICOIVoiceCommand {
+    case useOption(number: Int)
+    case copyOption(number: Int)
+    case copyCode
+    case exportSummary
+    case showMore
+}
+
 /// Manages speech recognition with automatic silence detection
 /// Responsibility: Speech recognition orchestration
 public class VoiceInteractionService: NSObject {
@@ -14,6 +28,9 @@ public class VoiceInteractionService: NSObject {
 
     private let silenceThreshold: TimeInterval = 2.5
     private var isUsingExternalAudio = false
+
+    /// Delegate for ICOI voice commands
+    public weak var icoiDelegate: ICOIVoiceCommandDelegate?
 
     public override init() {
         super.init()
@@ -146,6 +163,7 @@ public class VoiceInteractionService: NSObject {
         recognitionRequest = nil
         recognitionTask = nil
         lastTranscriptionTime = nil
+        print("🎤🎤🎤 CALLING COMPLETION CALLBACK WITH: '\(transcribedText)'")
         completion(transcribedText)
     }
 
@@ -291,6 +309,7 @@ public class VoiceInteractionService: NSObject {
         lastTranscriptionTime = nil
 
         print("🛑 Recording stopped: '\(transcribedText)'")
+        print("🎤🎤🎤 CALLING COMPLETION CALLBACK WITH: '\(transcribedText)'")
         completion(transcribedText)
     }
 
@@ -326,5 +345,65 @@ public class VoiceInteractionService: NSObject {
             return recognitionRequest != nil
         }
         return audioEngine?.isRunning ?? false
+    }
+
+    /// Detects ICOI voice commands in user input
+    private func detectICOICommand(in input: String) -> ICOIVoiceCommand? {
+        let normalizedInput = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // "use option X" or "select option X" or "choose option X"
+        if let optionNumber = extractOptionNumber(from: normalizedInput, patterns: ["use option", "select option", "choose option", "option"]) {
+            return .useOption(number: optionNumber)
+        }
+
+        // "copy option X"
+        if let optionNumber = extractOptionNumber(from: normalizedInput, patterns: ["copy option"]) {
+            return .copyOption(number: optionNumber)
+        }
+
+        // "copy code" or "copy the code"
+        if normalizedInput == "copy code" || normalizedInput == "copy the code" {
+            return .copyCode
+        }
+
+        // "export summary" or "export" or "save summary"
+        if normalizedInput == "export summary" || normalizedInput == "export" || normalizedInput == "save summary" {
+            return .exportSummary
+        }
+
+        // "show more" or "expand"
+        if normalizedInput == "show more" || normalizedInput == "expand" {
+            return .showMore
+        }
+
+        return nil
+    }
+
+    /// Extracts option number from command patterns
+    private func extractOptionNumber(from input: String, patterns: [String]) -> Int? {
+        for pattern in patterns {
+            if let range = input.range(of: pattern),
+               let numberString = input[range.upperBound...].trimmingCharacters(in: .whitespaces).first,
+               let number = Int(String(numberString)) {
+                return number
+            }
+        }
+        return nil
+    }
+
+    /// Returns confirmation message for ICOI commands
+    private func confirmationMessage(for command: ICOIVoiceCommand) -> String {
+        switch command {
+        case .useOption(let number):
+            return "Selected option \(number)"
+        case .copyOption(let number):
+            return "Copied option \(number)"
+        case .copyCode:
+            return "Code copied to clipboard"
+        case .exportSummary:
+            return "Summary exported"
+        case .showMore:
+            return "Expanded view"
+        }
     }
 }

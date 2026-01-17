@@ -46,7 +46,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await requestAllPermissions()
 
-            // Only setup overlays and tracking if we have an API key
+            // Check for API key and show input if missing
+            checkAndRequestAPIKey()
+
             setupOverlayWindows()
             setupMouseEventObserver()
             setupMouseTracking()
@@ -95,19 +97,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // This is called from signal handlers and atexit
         // Must be async-signal-safe operations only
 
-        // Try to read PID file and kill process directly
-        let pidFilePath = NSTemporaryDirectory() + "iris_eye_tracker.pid"
-        if let pidString = try? String(contentsOfFile: pidFilePath, encoding: .utf8),
-           let pid = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            kill(pid, SIGKILL)
+        // Use only async-signal-safe system calls
+        // Call pkill directly using posix_spawn (signal-safe)
+        var pid: pid_t = 0
+        var argv: [UnsafeMutablePointer<CChar>?] = [
+            strdup("/usr/bin/pkill"),
+            strdup("-9"),
+            strdup("-f"),
+            strdup("eye_tracker.py"),
+            nil
+        ]
+
+        defer {
+            // Clean up allocated strings
+            for i in 0..<argv.count - 1 {
+                free(argv[i])
+            }
         }
 
-        // Fallback: kill all eye_tracker.py processes
-        let task = Process()
-        task.launchPath = "/usr/bin/pkill"
-        task.arguments = ["-9", "-f", "eye_tracker.py"]
-        try? task.run()
-        task.waitUntilExit()
+        // Use posix_spawn which is async-signal-safe
+        posix_spawn(&pid, "/usr/bin/pkill", nil, nil, &argv, nil)
+    }
+
+    private func checkAndRequestAPIKey() {
+        if !DependencyContainer.shared.hasAPIKey() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                let apiKeyWindow = APIKeyInputWindow(
+                    onSave: { apiKey in
+                        if apiKey.isEmpty {
+                            return false
+                        }
+                        DependencyContainer.shared.saveAPIKey(apiKey)
+                        return true
+                    },
+                    onCancel: {
+                        print("⚠️ API Key setup cancelled - Gemini features will not work")
+                    }
+                )
+                apiKeyWindow.showWindow()
+            }
+        }
     }
 
     private func cleanupOrphanedProcesses() {

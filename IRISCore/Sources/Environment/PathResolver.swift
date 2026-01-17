@@ -15,14 +15,23 @@ public enum PathResolver {
     public static func detectEnvironment() -> Environment {
         let bundlePath = Bundle.main.bundlePath
 
-        if bundlePath.contains("/.build/") {
-            return .development
-        } else if bundlePath.contains("/DerivedData/") || bundlePath.contains("/build/Build/Products/") {
-            return .xcodeBuild
-        } else if bundlePath.contains(".app/") {
+        print("🔍 PathResolver.detectEnvironment: bundlePath = \(bundlePath)")
+
+        // Check for bundled FIRST (most specific - check if path ends with .app)
+        if bundlePath.hasSuffix(".app") || bundlePath.contains(".app/") {
+            print("✅ Detected: .bundled")
             return .bundled
         }
 
+        if bundlePath.contains("/.build/") {
+            print("✅ Detected: .development")
+            return .development
+        } else if bundlePath.contains("/DerivedData/") || bundlePath.contains("/build/Build/Products/") {
+            print("✅ Detected: .xcodeBuild")
+            return .xcodeBuild
+        }
+
+        print("✅ Detected: .development (default)")
         return .development
     }
 
@@ -104,7 +113,16 @@ public enum PathResolver {
             return "/usr/bin/python3"
 
         case .bundled:
-            // Production mode: use bundled Python
+            // Production mode: try to use development venv if available
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let devVenvPath = "\(homeDir)/Documents/iris2/gaze_env/bin/python3"
+
+            if FileManager.default.fileExists(atPath: devVenvPath) {
+                print("✅ PathResolver: Using development venv Python")
+                return devVenvPath
+            }
+
+            // Try bundled Python if available
             guard let projectRoot = resolveProjectRoot() else { return nil }
             let bundledPythonPath = "\(projectRoot)/Resources/python/bin/python3"
 
@@ -113,6 +131,7 @@ public enum PathResolver {
             }
 
             // Fallback to system Python
+            print("⚠️ PathResolver: Falling back to system Python")
             return "/usr/bin/python3"
         }
     }
@@ -145,12 +164,41 @@ public enum PathResolver {
 
         case .bundled:
             // Production mode: script in bundle resources
-            guard let projectRoot = resolveProjectRoot() else { return nil }
-            let bundledScriptPath = "\(projectRoot)/Resources/scripts/\(scriptName)"
+            let bundlePath = Bundle.main.bundlePath
+            let resourcesPath = "\(bundlePath)/Contents/Resources"
 
-            if FileManager.default.fileExists(atPath: bundledScriptPath) {
-                return bundledScriptPath
+            print("📂 PathResolver: bundlePath = \(bundlePath)")
+            print("📂 PathResolver: resourcesPath = \(resourcesPath)")
+
+            // Try scripts subdirectory first
+            let scriptsPath = "\(resourcesPath)/scripts/\(scriptName)"
+            print("🔍 PathResolver: Checking bundled script at: \(scriptsPath)")
+            let scriptsExists = FileManager.default.fileExists(atPath: scriptsPath)
+            print("   Result: \(scriptsExists ? "EXISTS ✅" : "NOT FOUND ❌")")
+            if scriptsExists {
+                print("✅ PathResolver: Found script in scripts/ subdirectory")
+                return scriptsPath
             }
+
+            // Fallback to root of Resources
+            let rootScriptPath = "\(resourcesPath)/\(scriptName)"
+            print("🔍 PathResolver: Checking bundled script at: \(rootScriptPath)")
+            let rootExists = FileManager.default.fileExists(atPath: rootScriptPath)
+            print("   Result: \(rootExists ? "EXISTS ✅" : "NOT FOUND ❌")")
+            if rootExists {
+                print("✅ PathResolver: Found script in Resources root")
+                return rootScriptPath
+            }
+
+            // List what's actually in Resources
+            do {
+                let contents = try FileManager.default.contentsOfDirectory(atPath: resourcesPath)
+                print("📂 PathResolver: Contents of Resources: \(contents)")
+            } catch {
+                print("❌ PathResolver: Failed to list Resources: \(error)")
+            }
+
+            print("❌ PathResolver: Script not found in bundle resources")
         }
 
         return nil

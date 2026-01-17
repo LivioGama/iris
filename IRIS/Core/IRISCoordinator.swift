@@ -7,6 +7,19 @@ import IRISGaze
 import IRISNetwork
 import IRISMedia
 
+extension String {
+    func appendLine(to path: String) throws {
+        let line = self + "\n"
+        if let fileHandle = FileHandle(forWritingAtPath: path) {
+            fileHandle.seekToEndOfFile()
+            fileHandle.write(line.data(using: .utf8)!)
+            fileHandle.closeFile()
+        } else {
+            try line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
 @MainActor
 class IRISCoordinator: ObservableObject {
     // MARK: - Dependencies (Injected)
@@ -169,17 +182,33 @@ class IRISCoordinator: ObservableObject {
     }
 
     func start() async {
+        let logMsg = "🚀 IRISCoordinator.start() called"
+        try? logMsg.write(toFile: "/tmp/iris_startup.log", atomically: true, encoding: .utf8)
+
         checkAccessibility()
         if !isAccessibilityEnabled {
+            try? "⚠️ Accessibility not enabled".appendLine(to: "/tmp/iris_startup.log")
             requestAccessibilityPermission()
+        } else {
+            try? "✅ Accessibility enabled".appendLine(to: "/tmp/iris_startup.log")
         }
+
         do {
+            try? "📡 Starting audio service...".appendLine(to: "/tmp/iris_startup.log")
             try await audioService.start()
+            try? "✅ Audio service started".appendLine(to: "/tmp/iris_startup.log")
+
+            try? "👁️ Starting gaze estimator...".appendLine(to: "/tmp/iris_startup.log")
             gazeEstimator.start()
+            try? "✅ Gaze estimator started".appendLine(to: "/tmp/iris_startup.log")
+
             isActive = true
             log("I.R.I.S activated - EyeGestures Python")
+            try? "✅ I.R.I.S activated".appendLine(to: "/tmp/iris_startup.log")
         } catch {
-            log("Failed to start: \(error)")
+            let errorMsg = "❌ Failed to start: \(error)"
+            log(errorMsg)
+            try? errorMsg.appendLine(to: "/tmp/iris_startup.log")
         }
     }
 

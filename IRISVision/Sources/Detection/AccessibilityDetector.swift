@@ -18,9 +18,37 @@ public class AccessibilityDetector {
     }
 
     public func findElement(at point: CGPoint) -> DetectedElement? {
-        guard var element = getElementAt(point: point) else {
+        guard let initialElement = getElementAt(point: point) else {
             return nil
         }
+
+        // Get screen size first
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        let screenArea = screenSize.width * screenSize.height
+
+        // Start from the initial element
+        // Windows/Groups might have useful children, so check them first
+        var element = initialElement
+        if let initialRole = getElementRole(initialElement),
+           (initialRole == "AXWindow" || initialRole == "AXGroup"),
+           let children = getElementChildren(initialElement), !children.isEmpty {
+            // Find child at point to start from
+            for child in children {
+                if let childBounds = getElementBounds(child),
+                   childBounds.contains(point) {
+                    element = child
+                    break
+                }
+            }
+        }
+
+        // Now walk up hierarchy from the element (which might be a child or the original element)
+
+        var bestCandidate: (element: AXUIElement, bounds: CGRect, role: String)? = nil
+        var smallestReasonableCandidate: (element: AXUIElement, bounds: CGRect, role: String)? = nil
+        var largestArea: CGFloat = 0
+        var allElements: [(element: AXUIElement, role: String, bounds: CGRect)] = []
+        let maxReasonableArea = screenArea * 0.6 // Elements should be < 60% of screen
 
         // Walk up the hierarchy to find a high-level structural element
         var maxDepth = 10 // Prevent infinite loops
@@ -34,7 +62,25 @@ public class AccessibilityDetector {
                     element = parent
                     continue
                 }
-                return nil
+                break
+            }
+
+            // Log all elements we encounter
+            allElements.append((element, role, bounds))
+
+            let area = bounds.area
+
+            // Prefer SMALLEST reasonable element (not too tiny, not screen-sized)
+            if area >= 3000 && area <= maxReasonableArea {
+                if smallestReasonableCandidate == nil || area < smallestReasonableCandidate!.bounds.area {
+                    smallestReasonableCandidate = (element, bounds, role)
+                }
+            }
+
+            // Track the largest element as backup (but not screen-sized)
+            if area > largestArea && bounds.width > 50 && bounds.height > 30 && area < maxReasonableArea {
+                largestArea = area
+                bestCandidate = (element, bounds, role)
             }
 
             // Check if this is a high-level structural element
@@ -59,6 +105,50 @@ public class AccessibilityDetector {
             }
         }
 
+        // Use FIRST reasonable non-screen-sized element we found
+        // Only accept larger structural elements (panels, sidebars), skip small UI elements
+        for elem in allElements {
+            if elem.bounds.area < maxReasonableArea && elem.bounds.area >= 30000 {
+                let type = mapRoleToElementType(elem.role)
+                let label = getElementLabel(elem.element) ?? elem.role.replacingOccurrences(of: "AX", with: "")
+
+                return DetectedElement(
+                    bounds: elem.bounds,
+                    label: label,
+                    type: type,
+                    confidence: 0.7
+                )
+            }
+        }
+
+        // Fallback 1: Prefer SMALLEST reasonable element
+        if let candidate = smallestReasonableCandidate {
+            let type = mapRoleToElementType(candidate.role)
+            let label = getElementLabel(candidate.element) ?? candidate.role.replacingOccurrences(of: "AX", with: "")
+
+            return DetectedElement(
+                bounds: candidate.bounds,
+                label: label,
+                type: type,
+                confidence: 0.6
+            )
+        }
+
+        // Fallback 2: Use ANY element that's not screen-sized
+        for elem in allElements {
+            if elem.bounds.area < maxReasonableArea {
+                let type = mapRoleToElementType(elem.role)
+                let label = getElementLabel(elem.element) ?? elem.role.replacingOccurrences(of: "AX", with: "")
+
+                return DetectedElement(
+                    bounds: elem.bounds,
+                    label: label,
+                    type: type,
+                    confidence: 0.4
+                )
+            }
+        }
+
         return nil
     }
 
@@ -77,25 +167,41 @@ public class AccessibilityDetector {
         return nil
     }
 
-    private func isHighLevelElement(_ role: String, bounds: CGRect) -> Bool {
-        // Allow sidebars, panels, windows, and large structural elements (excluding AXOutline and AXToolbar)
-        let allowedRoles: Set<String> = [
-            "AXSplitGroup",
-            "AXList",
-            "AXGroup",
-            "AXScrollArea",
-            "AXWindow"
-        ]
+    private func getElementChildren(_ element: AXUIElement) -> [AXUIElement]? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(
+            element,
+            kAXChildrenAttribute as CFString,
+            &value
+        )
 
-        // Check if it's an allowed role
-        guard allowedRoles.contains(role) else {
+        if result == .success, let children = value as? [AXUIElement] {
+            return children
+        }
+
+        return nil
+    }
+
+    private func isHighLevelElement(_ role: String, bounds: CGRect) -> Bool {
+        // Get screen size to filter out screen-sized elements
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        let screenArea = screenSize.width * screenSize.height
+
+        // Reject screen-sized or nearly-screen-sized elements
+        if bounds.area > screenArea * 0.7 {
             return false
         }
 
-        // Must be reasonably sized (not tiny UI elements)
-        let minWidth: CGFloat = 150
+        // Windows should be reasonably sized, not full screen
+        if role == "AXWindow" {
+            return bounds.width > 100 && bounds.height > 100 && bounds.area < screenArea * 0.7
+        }
+
+        // Only accept larger structural elements (panels, sidebars)
+        // Skip small elements like individual messages or buttons
+        let minWidth: CGFloat = 200
         let minHeight: CGFloat = 150
-        let minArea: CGFloat = 30000 // At least 200x150 equivalent
+        let minArea: CGFloat = 30000
 
         return bounds.width >= minWidth &&
                bounds.height >= minHeight &&
@@ -250,27 +356,14 @@ public class AccessibilityDetector {
 
     public func detectElementFast(at point: CGPoint) -> DetectedElement? {
         guard isAccessibilityEnabled() else {
-            print("⚠️  Accessibility NOT enabled")
             return nil
         }
 
-        let element = findElement(at: point)
-        if element == nil {
-            if let axElement = getElementAt(point: point),
-               let role = getElementRole(axElement),
-               let bounds = getElementBounds(axElement) {
-                let title = getElementLabel(axElement) ?? "no title"
-                print("❌ Initial element: role=\(role) title=\"\(title)\" size=\(Int(bounds.width))x\(Int(bounds.height))")
-            }
-        } else {
-            print("✅ Detected: \(element!.label) (\(element!.type)) role from AX")
-        }
-        return element
+        return findElement(at: point)
     }
 
     public func detectWindow(at point: CGPoint) -> DetectedElement? {
         guard isAccessibilityEnabled() else {
-            print("❌ Window detection: Accessibility not enabled")
             return nil
         }
 
@@ -305,7 +398,6 @@ public class AccessibilityDetector {
         }
 
         // Fallback: Use CGWindowList to find window at point
-        print("🔍 Trying CGWindowList fallback for window detection")
         return detectWindowViaCGWindowList(at: point)
     }
 
@@ -316,7 +408,19 @@ public class AccessibilityDetector {
             return nil
         }
 
-        for windowInfo in windowList {
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        let screenArea = screenSize.width * screenSize.height
+        let maxReasonableArea = screenArea * 0.7
+
+        var candidates: [(bounds: CGRect, label: String, area: CGFloat, layer: Int)] = []
+
+        // CGWindowList is ordered front-to-back, so lower index = frontmost
+        for (layer, windowInfo) in windowList.enumerated() {
+            // Skip windows that are not on screen (minimized, hidden, etc.)
+            if let alpha = windowInfo[kCGWindowAlpha as String] as? CGFloat, alpha < 0.1 {
+                continue
+            }
+
             // Skip IRIS overlay and system UI elements
             if let ownerName = windowInfo[kCGWindowOwnerName as String] as? String {
                 if ownerName == "IRIS" || ownerName == "Dock" || ownerName == "Window Server" ||
@@ -342,31 +446,38 @@ public class AccessibilityDetector {
                 let isMenuBarLike = aspectRatio > 6.0 && bounds.height < 300 && isAtTopOfScreen
 
                 if isMenuBarLike {
-                    let msg = "⏭️ Skipping menu bar-like window: \(Int(bounds.width))x\(Int(bounds.height))"
-                    print(msg)
-                    try? msg.appendLine(to: "/tmp/iris_debug.log")
+                    continue
+                }
+
+                // Skip full-screen windows
+                let area = bounds.width * bounds.height
+                if area > maxReasonableArea {
                     continue
                 }
 
                 let appName = windowInfo[kCGWindowOwnerName as String] as? String ?? "Unknown"
                 let windowName = windowInfo[kCGWindowName as String] as? String
-
                 let label = windowName ?? appName
 
-                let msg = "✅ CGWindowList found: \(label) at bounds=(\(Int(bounds.origin.x)),\(Int(bounds.origin.y)) \(Int(bounds.width))x\(Int(bounds.height)))"
-                print(msg)
-                try? msg.appendLine(to: "/tmp/iris_debug.log")
-
-                return DetectedElement(
-                    bounds: bounds,
-                    label: label,
-                    type: .window,
-                    confidence: 0.65
-                )
+                candidates.append((bounds: bounds, label: label, area: area, layer: layer))
             }
         }
 
-        print("❌ No window found at point via CGWindowList")
+        // Return the SMALLEST window from FRONTMOST windows (lower layer = closer to front)
+        if let smallest = candidates.min(by: {
+            if $0.layer != $1.layer {
+                return $0.layer < $1.layer  // Prioritize frontmost
+            }
+            return $0.area < $1.area  // Then smallest
+        }) {
+            return DetectedElement(
+                bounds: smallest.bounds,
+                label: smallest.label,
+                type: .window,
+                confidence: 0.65
+            )
+        }
+
         return nil
     }
 
