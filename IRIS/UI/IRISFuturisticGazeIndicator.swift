@@ -151,10 +151,12 @@ struct IRISFuturisticGazeIndicator: View {
         let standardized = globalBounds.standardized
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return nil }
-        let mainFrame = NSScreen.main?.frame ?? screen.frame
-        let referenceMaxY = mainFrame.maxY
+
+        // Use primary screen (origin 0,0) as reference, NOT NSScreen.main
+        let primaryScreen = NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens[0]
+        let referenceMaxY = primaryScreen.frame.maxY
         let appKitRect = CGRect(
-            x: standardized.origin.x + mainFrame.minX,
+            x: standardized.origin.x,
             y: referenceMaxY - (standardized.origin.y + standardized.height),
             width: standardized.width,
             height: standardized.height
@@ -177,7 +179,7 @@ struct IRISFuturisticGazeIndicator: View {
             height: intersection.height
         )
 
-        let logEntry = "🔁 Highlight conversion \(screen.localizedName ?? "screen"): AX \(standardized) → AppKit \(appKitRect) → Local \(localRect) | mainOrigin \(mainFrame.origin)"
+        let logEntry = "🔁 Highlight conversion \(screen.localizedName ?? "screen"): AX \(standardized) → AppKit \(appKitRect) → Local \(localRect) | primaryOrigin \(primaryScreen.frame.origin)"
         print(logEntry)
         try? logEntry.appendLine(to: "/tmp/iris_detection.log")
 

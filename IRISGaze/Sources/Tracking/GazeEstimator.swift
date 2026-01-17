@@ -295,15 +295,21 @@ public class GazeEstimator: ObservableObject {
         let scaledPoint = scaledPointForScreen(point, screen: screen)
         let clampedX = min(max(scaledPoint.x, 0), screen.frame.width)
         let clampedYFromTop = min(max(scaledPoint.y, 0), screen.frame.height)
+
+        // Convert to global AppKit coordinates
         let localX = clampedX
-        let localY = screen.frame.height - clampedYFromTop
+        let localY = screen.frame.height - clampedYFromTop  // Flip Y within screen
         let globalX = screen.frame.origin.x + localX
         let globalY = screen.frame.origin.y + localY
-        let mainFrame = NSScreen.main?.frame ?? screen.frame
-        let accessibilityX = globalX - mainFrame.minX
-        let accessibilityY = mainFrame.maxY - globalY
+
+        // Accessibility uses global coords with Y-down from primary screen's top
+        // Primary screen is at origin (0,0), NOT NSScreen.main (which is the focused screen)
+        let primaryScreen = NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens[0]
+        let accessibilityX = globalX
+        let accessibilityY = primaryScreen.frame.maxY - globalY
+
         let accessibilityPoint = CGPoint(x: accessibilityX, y: accessibilityY)
-        let logMsg = "🔍 SCREEN(\(Int(screen.frame.width))x\(Int(screen.frame.height))): Py(\(Int(point.x)),\(Int(point.y))) → Local(\(Int(localX)),\(Int(localY))) → Global(\(Int(globalX)),\(Int(globalY))) → Acc(\(Int(accessibilityPoint.x)),\(Int(accessibilityPoint.y))) [main:\(Int(mainFrame.minX)),\(Int(mainFrame.maxY))]"
+        let logMsg = "🔍 SCREEN(\(Int(screen.frame.width))x\(Int(screen.frame.height))): Py(\(Int(point.x)),\(Int(point.y))) → Local(\(Int(localX)),\(Int(localY))) → Global(\(Int(globalX)),\(Int(globalY))) → Acc(\(Int(accessibilityPoint.x)),\(Int(accessibilityPoint.y))) [primary:\(Int(primaryScreen.frame.origin.x)),\(Int(primaryScreen.frame.maxY))]"
         return (accessibilityPoint, logMsg)
     }
 
@@ -374,7 +380,10 @@ public class GazeEstimator: ObservableObject {
             try? "\(key): \(value)".appendLine(to: "/tmp/iris_startup.log")
         }
 
-        let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        // Use the largest screen resolution for calibration (usually the external monitor)
+        // This ensures eye tracking covers the full range of all displays
+        let largestScreen = NSScreen.screens.max(by: { $0.frame.width < $1.frame.width }) ?? NSScreen.main
+        let screen = largestScreen?.frame ?? CGRect(x: 0, y: 0, width: 3840, height: 1600)
         let screenWidth = Int(screen.width)
         let screenHeight = Int(screen.height)
 
