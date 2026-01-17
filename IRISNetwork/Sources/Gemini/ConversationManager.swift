@@ -1,10 +1,11 @@
 import Foundation
+import GoogleGenerativeAI
 
 /// Manages conversation history with automatic pruning to prevent memory leaks
 /// Responsibility: Conversation state management with bounded history
 public class ConversationManager {
     private let maxHistoryLength: Int
-    private var history: [GeminiRequest.Content] = []
+    private var history: [ModelContent] = []
 
     public init(maxHistoryLength: Int = 20) {
         self.maxHistoryLength = maxHistoryLength
@@ -12,7 +13,7 @@ public class ConversationManager {
 
     /// Adds a message to conversation history with automatic pruning
     /// Always keeps the first message (initial context) and prunes middle messages when limit is exceeded
-    public func addMessage(_ content: GeminiRequest.Content) {
+    public func addMessage(_ content: ModelContent) {
         history.append(content)
 
         // Prune history if it exceeds max length
@@ -26,7 +27,7 @@ public class ConversationManager {
     }
 
     /// Returns all conversation history
-    public func getHistory() -> [GeminiRequest.Content] {
+    public func getHistory() -> [ModelContent] {
         return history
     }
 

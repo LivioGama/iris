@@ -15,7 +15,8 @@ let package = Package(
         .library(name: "IRISMedia", targets: ["IRISMedia"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0")
+        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),
+        .package(url: "https://github.com/google/generative-ai-swift.git", from: "0.5.4")
     ],
     targets: [
         // Core module: Models, protocols, security
@@ -45,7 +46,11 @@ let package = Package(
         // Network module: Gemini API, conversation management
         .target(
             name: "IRISNetwork",
-            dependencies: ["IRISCore", "IRISVision"],
+            dependencies: [
+                "IRISCore",
+                "IRISVision",
+                .product(name: "GoogleGenerativeAI", package: "generative-ai-swift")
+            ],
             path: "IRISNetwork/Sources"
         ),
 

@@ -5,6 +5,7 @@ import IRISCore
 import IRISNetwork
 import IRISMedia
 import IRISVision
+import GoogleGenerativeAI
 
 /// High-level orchestrator for Gemini assistant interactions
 /// Responsibility: Workflow coordination ONLY - delegates to specialized services
@@ -126,6 +127,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             print("⏱️ Starting countdown timer with timeout: \(timeoutDuration)s")
             self.startCountdownTimer(totalTimeout: timeoutDuration)
             print("⏱️ Timer started, continuing...")
+
+            // CRITICAL: Set isListeningForBuffers BEFORE startListening so buffers are sent
+            self.isListeningForBuffers = true
+            self.bufferCount = 0
+            print("🎤 Set isListeningForBuffers = true BEFORE startListening")
         }
 
         voiceInteractionService.startListening(timeout: timeoutDuration, useExternalAudio: true, onSpeechDetected: { [weak self] in
@@ -322,21 +328,25 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         // Build prompt with context
         let fullPrompt = buildPrompt(actualPrompt: actualPrompt, focusedElement: focusedElement)
 
-        // Create Gemini request
-        let initialMessage = GeminiRequest.Content(
+        // Convert base64 string to Data
+        guard let imageData = Data(base64Encoded: base64Image) else {
+            await MainActor.run {
+                self.geminiResponse = "Error: Failed to decode image data"
+                self.isProcessing = false
+            }
+            return
+        }
+
+        // Create message using Google SDK types
+        let initialMessage = ModelContent(
             role: "user",
             parts: [
-                GeminiRequest.Content.Part(text: fullPrompt, inlineData: nil),
-                GeminiRequest.Content.Part(
-                    text: nil,
-                    inlineData: GeminiRequest.Content.Part.InlineData(mimeType: "image/jpeg", data: base64Image)
-                )
+                ModelContent.Part.text(fullPrompt),
+                ModelContent.Part.data(mimetype: "image/jpeg", imageData)
             ]
         )
 
         conversationManager.addMessage(initialMessage)
-
-        let request = GeminiRequest(contents: conversationManager.getHistory())
 
         // Send streaming request
         print("🌐 About to send Gemini API streaming request...")
@@ -348,7 +358,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self.liveGeminiResponse = ""
             }
 
-            let responseText = try await geminiClient.sendStreamingRequest(request) { [weak self] partialText in
+            let responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
                 // Update live Gemini response in real-time
                 Task { @MainActor in
                     self?.liveGeminiResponse = partialText
@@ -364,9 +374,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             }
 
             // Add response to history
-            let assistantMessage = GeminiRequest.Content(
+            let assistantMessage = ModelContent(
                 role: "model",
-                parts: [GeminiRequest.Content.Part(text: responseText, inlineData: nil)]
+                parts: [ModelContent.Part.text(responseText)]
             )
             conversationManager.addMessage(assistantMessage)
 
@@ -441,13 +451,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
         }
 
         // Add to conversation history
-        let userMessage = GeminiRequest.Content(
+        let userMessage = ModelContent(
             role: "user",
-            parts: [GeminiRequest.Content.Part(text: actualPrompt, inlineData: nil)]
+            parts: [ModelContent.Part.text(actualPrompt)]
         )
         conversationManager.addMessage(userMessage)
-
-        let request = GeminiRequest(contents: conversationManager.getHistory())
 
         do {
             // Clear previous live response
@@ -455,7 +463,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self.liveGeminiResponse = ""
             }
 
-            let responseText = try await geminiClient.sendStreamingRequest(request) { [weak self] partialText in
+            let responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
                 // Update live Gemini response in real-time
                 Task { @MainActor in
                     self?.liveGeminiResponse = partialText
@@ -467,9 +475,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self.liveGeminiResponse = ""
             }
 
-            let assistantMessage = GeminiRequest.Content(
+            let assistantMessage = ModelContent(
                 role: "model",
-                parts: [GeminiRequest.Content.Part(text: responseText, inlineData: nil)]
+                parts: [ModelContent.Part.text(responseText)]
             )
             conversationManager.addMessage(assistantMessage)
 

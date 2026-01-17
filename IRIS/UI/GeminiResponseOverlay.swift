@@ -124,24 +124,6 @@ struct GeminiResponseOverlay: View {
                     }
                 }
 
-                // Live transcription display
-                if !geminiService.liveTranscription.isEmpty {
-                    Text(geminiService.liveTranscription)
-                        .font(.system(size: 15))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.white.opacity(0.1))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                        )
-                        .transition(.opacity)
-                }
-
                 // Chat messages
                 if !geminiService.chatMessages.isEmpty {
                     ScrollViewReader { proxy in
@@ -396,9 +378,15 @@ struct ChatMessageView: View {
 
                 // Show loading indicator for "..." content, or live streaming text
                 if message.content == "..." {
-                    // Check if we have live streaming Gemini response for this loading bubble
+                    // Check if we have live streaming response for this loading bubble
                     if message.role == .assistant && !geminiService.liveGeminiResponse.isEmpty {
                         Text(geminiService.liveGeminiResponse)
+                            .font(.system(size: 15))
+                            .foregroundColor(.white.opacity(0.9))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if message.role == .user && !geminiService.liveTranscription.isEmpty {
+                        Text(geminiService.liveTranscription)
                             .font(.system(size: 15))
                             .foregroundColor(.white.opacity(0.9))
                             .textSelection(.enabled)

@@ -64,7 +64,35 @@ class DependencyContainer {
 
     // Network Services
     private(set) lazy var geminiClient: GeminiClient = {
-        let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        // Try to get API key from environment variable first
+        var apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+
+        // If not found, try to load from .zshrc
+        if apiKey.isEmpty {
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let zshrcPath = "\(homeDir)/.zshrc"
+
+            if let zshrcContent = try? String(contentsOfFile: zshrcPath, encoding: .utf8) {
+                // Parse GEMINI_API_KEY from .zshrc
+                let lines = zshrcContent.components(separatedBy: .newlines)
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    // Match: export GEMINI_API_KEY="..." or export GEMINI_API_KEY='...'
+                    if trimmed.hasPrefix("export GEMINI_API_KEY=") {
+                        let keyValue = trimmed.replacingOccurrences(of: "export GEMINI_API_KEY=", with: "")
+                        // Remove quotes
+                        apiKey = keyValue.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                        print("🔑 Loaded GEMINI_API_KEY from .zshrc")
+                        break
+                    }
+                }
+            }
+        }
+
+        if apiKey.isEmpty {
+            print("⚠️ GEMINI_API_KEY not found in environment or .zshrc")
+        }
+
         return GeminiClient(apiKey: apiKey)
     }()
 
