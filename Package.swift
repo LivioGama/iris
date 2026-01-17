@@ -60,6 +60,28 @@ let package = Package(
                 "IRISMedia"
             ],
             path: "IRIS"
+        ),
+
+        // Tests
+        .testTarget(
+            name: "IRISCoreTests",
+            dependencies: ["IRISCore"],
+            path: "Tests/IRISCoreTests"
+        ),
+        .testTarget(
+            name: "IRISNetworkTests",
+            dependencies: ["IRISNetwork", "IRISCore"],
+            path: "Tests/IRISNetworkTests"
+        ),
+        .testTarget(
+            name: "IRISGazeTests",
+            dependencies: ["IRISGaze", "IRISCore", "IRISVision"],
+            path: "Tests/IRISGazeTests"
+        ),
+        .testTarget(
+            name: "IRISIntegrationTests",
+            dependencies: ["IRISCore", "IRISVision", "IRISGaze", "IRISNetwork", "IRISMedia"],
+            path: "Tests/IRISIntegrationTests"
         )
     ]
 )
