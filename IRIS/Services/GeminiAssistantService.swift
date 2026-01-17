@@ -67,8 +67,12 @@ class GeminiAssistantService: NSObject, ObservableObject {
     private let visionTextDetector = VisionTextDetector()
 
     override init() {
-        // Get API key from environment or use placeholder
-        self.apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        // Try to get API key from Keychain first, fallback to environment variable for backwards compatibility
+        if let keychainKey = try? KeychainService.shared.getAPIKey() {
+            self.apiKey = keychainKey
+        } else {
+            self.apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        }
         super.init()
     }
 

@@ -46,7 +46,12 @@ class SentimentAnalysisService {
     """
 
     init() {
-        self.apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        // Try to get API key from Keychain first, fallback to environment variable for backwards compatibility
+        if let keychainKey = try? KeychainService.shared.getAPIKey() {
+            self.apiKey = keychainKey
+        } else {
+            self.apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        }
     }
 
     func analyzeSentiment(_ text: String) async throws -> SentimentAnalysisResponse {
