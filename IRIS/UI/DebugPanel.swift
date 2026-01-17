@@ -21,7 +21,7 @@ struct DebugPanel: View {
             if isExpanded {
                 Divider().background(Color.gray)
                 
-                Group {
+                VStack(alignment: .leading, spacing: 5) {
                     HStack {
                         Circle()
                             .fill(coordinator.isActive ? Color.green : Color.red)
@@ -29,7 +29,6 @@ struct DebugPanel: View {
                         Text(coordinator.isActive ? "Active" : "Inactive")
                     }
                     
-                    Text("State: \(String(describing: coordinator.currentState))")
                     Text("Gaze: (\(Int(coordinator.gazeEstimator.gazePoint.x)), \(Int(coordinator.gazeEstimator.gazePoint.y)))")
                     
                     if !coordinator.speechService.transcript.isEmpty {

@@ -1,0 +1,291 @@
+import Foundation
+import IRISCore
+import IRISGaze
+import IRISVision
+import IRISNetwork
+import IRISMedia
+import GoogleGenerativeAI
+
+/// Dependency injection container for IRIS services
+/// Provides centralized service management with clear dependencies
+@MainActor
+class DependencyContainer {
+    // MARK: - Singleton
+
+    static let shared = DependencyContainer()
+
+    // MARK: - Service Instances
+
+    // Media Services
+    private(set) lazy var cameraService: CameraService = {
+        CameraService()
+    }()
+
+    private(set) lazy var audioService: IRISMedia.AudioService = {
+        IRISMedia.AudioService()
+    }()
+
+    private(set) lazy var speechService: SpeechService = {
+        SpeechService()
+    }()
+
+    private(set) lazy var screenCaptureService: IRISMedia.ScreenCaptureService = {
+        IRISMedia.ScreenCaptureService()
+    }()
+
+    private(set) lazy var screenshotService: ScreenshotService = {
+        ScreenshotService()
+    }()
+
+    private(set) lazy var continuousScreenCapture: IRISMedia.ContinuousScreenCaptureService = {
+        IRISMedia.ContinuousScreenCaptureService()
+    }()
+
+    private(set) lazy var audioStreamEncoder: IRISMedia.AudioStreamEncoder = {
+        IRISMedia.AudioStreamEncoder()
+    }()
+
+    private(set) lazy var voiceInteractionService: VoiceInteractionService = {
+        VoiceInteractionService()
+    }()
+
+    // Vision Services
+    private(set) lazy var accessibilityDetector: AccessibilityDetector = {
+        AccessibilityDetector()
+    }()
+
+    private(set) lazy var computerVisionDetector: ComputerVisionDetector = {
+        ComputerVisionDetector()
+    }()
+
+    private(set) lazy var visionTextDetector: VisionTextDetector = {
+        VisionTextDetector()
+    }()
+
+
+    // Gaze Services
+    private(set) lazy var gazeEstimator: GazeEstimator = {
+        GazeEstimator()
+    }()
+
+    // Network Services
+    private(set) lazy var geminiClient: GeminiClient = {
+        // Priority order for API key:
+        // 1. UserDefaults (persistent storage)
+        // 2. Environment variable
+        // 3. .zshrc file
+
+        var apiKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+
+        if !apiKey.isEmpty {
+            print("🔑 Loaded GEMINI_API_KEY from UserDefaults")
+            return GeminiClient(apiKey: apiKey)
+        }
+
+        // Try environment variable
+        apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+        if !apiKey.isEmpty {
+            print("🔑 Loaded GEMINI_API_KEY from environment")
+            // Save to UserDefaults for future launches
+            UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
+            return GeminiClient(apiKey: apiKey)
+        }
+
+        // Try .zshrc as fallback
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let zshrcPath = "\(homeDir)/.zshrc"
+
+        if let zshrcContent = try? String(contentsOfFile: zshrcPath, encoding: .utf8) {
+            let lines = zshrcContent.components(separatedBy: .newlines)
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("export GEMINI_API_KEY=") {
+                    let keyValue = trimmed.replacingOccurrences(of: "export GEMINI_API_KEY=", with: "")
+                    apiKey = keyValue.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                    print("🔑 Loaded GEMINI_API_KEY from .zshrc")
+                    // Save to UserDefaults for future launches
+                    UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
+                    break
+                }
+            }
+        }
+
+        if apiKey.isEmpty {
+            print("⚠️ GEMINI_API_KEY not found - user will need to enter it")
+        }
+
+        // Inject Agentic Tools
+        return GeminiClient(apiKey: apiKey, tools: AgentTools.allTools)
+    }()
+
+    private(set) lazy var geminiAudioClient: GeminiAudioClient = {
+        let apiKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        return GeminiAudioClient(apiKey: apiKey)
+    }()
+
+    private(set) lazy var geminiLiveClient: GeminiLiveClient = {
+        let apiKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        return GeminiLiveClient(apiKey: apiKey)
+    }()
+
+    private(set) lazy var conversationManager: ConversationManager = {
+        ConversationManager(maxHistoryLength: 20)
+    }()
+
+    private(set) lazy var messageExtractionService: MessageExtractionService = {
+        MessageExtractionService()
+    }()
+
+    private(set) lazy var sentimentAnalysisService: SentimentAnalysisService = {
+        SentimentAnalysisService.shared
+    }()
+
+    private(set) lazy var geminiAssistant: GeminiAssistantOrchestrator = {
+        GeminiAssistantOrchestrator(
+            geminiClient: geminiClient,
+            geminiAudioClient: geminiAudioClient,
+            geminiLiveClient: geminiLiveClient,
+            conversationManager: conversationManager,
+            voiceInteractionService: voiceInteractionService,
+            messageExtractionService: messageExtractionService,
+            screenshotService: screenshotService,
+            gazeEstimator: gazeEstimator,
+            continuousScreenCapture: continuousScreenCapture,
+            cameraService: cameraService,
+            audioStreamEncoder: audioStreamEncoder
+        )
+    }()
+
+
+    // MARK: - Initialization
+
+    private init() {
+        // Private initializer to enforce singleton pattern
+    }
+
+    // MARK: - Factory Methods
+
+    /// Creates a new IRISCoordinator with all dependencies injected
+    func makeCoordinator() -> IRISCoordinator {
+        return IRISCoordinator(container: self)
+    }
+
+    // MARK: - Service Access
+
+    /// Returns a gaze tracking service conforming to the protocol
+    func makeGazeTrackingService() -> any GazeTrackingService {
+        return gazeEstimator
+    }
+
+    /// Returns an AI assistant service conforming to the protocol
+    func makeAIAssistantService() -> any AIAssistantService {
+        return geminiAssistant
+    }
+
+    /// Returns an element detection service conforming to the protocol
+    func makeElementDetectionService() -> any ElementDetectionService {
+        return accessibilityDetector
+    }
+
+    /// Returns a screen capture service conforming to the protocol
+    func makeScreenCaptureService() -> any ScreenCaptureServiceProtocol {
+        return screenCaptureService
+    }
+
+    /// Returns an audio service
+    func makeAudioService() -> any AudioServiceProtocol {
+        return audioService
+    }
+
+
+    /// Returns a contextual analysis service
+    func makeContextualAnalysisService() -> any ContextualAnalysisServiceProtocol {
+        fatalError("ContextualAnalysisService removed")
+    }
+
+    // MARK: - Reset
+
+    /// Resets all services (useful for testing or app reset)
+    func reset() {
+        // Stop all services
+        gazeEstimator.stop()
+        audioService.stop()
+
+        // Clear any cached state
+        conversationManager.clearHistory()
+    }
+
+    // MARK: - API Key Management
+
+    /// Saves the API key to UserDefaults and updates the Gemini clients
+    func saveAPIKey(_ apiKey: String) {
+        UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
+        geminiClient.updateAPIKey(apiKey)
+        geminiAudioClient.updateAPIKey(apiKey)
+        geminiLiveClient.updateAPIKey(apiKey)
+        print("🔑 API Key saved and updated")
+    }
+
+    /// Gets the current API key from UserDefaults
+    func getAPIKey() -> String? {
+        return UserDefaults.standard.string(forKey: "GEMINI_API_KEY")
+    }
+
+    /// Checks if API key is configured
+    func hasAPIKey() -> Bool {
+        guard let key = getAPIKey() else { return false }
+        return !key.isEmpty
+    }
+
+    // MARK: - Testing Support
+
+    #if DEBUG
+    /// Allows overriding services for testing
+    private var serviceOverrides: [String: Any] = [:]
+
+    func override<T>(_ service: T, forKey key: String) {
+        serviceOverrides[key] = service
+    }
+
+    func clearOverrides() {
+        serviceOverrides.removeAll()
+    }
+    #endif
+}
+
+// MARK: - Protocol Conformance Extensions
+
+// These extensions help existing services conform to the protocols defined in Phase 7
+
+@MainActor
+extension GazeEstimator: @preconcurrency GazeTrackingService {
+    public var currentGaze: CGPoint {
+        return gazePoint
+    }
+}
+
+extension GeminiAssistantOrchestrator: AIAssistantService {
+    // Already conforms - no changes needed
+}
+
+extension AccessibilityDetector: ElementDetectionService {
+    public func detectElement(at point: CGPoint) async -> DetectedElement? {
+        return detectElementFast(at: point)
+    }
+}
+
+@MainActor
+extension IRISMedia.ScreenCaptureService: @preconcurrency ScreenCaptureServiceProtocol {
+    // Already conforms - no changes needed
+}
+
+@MainActor
+extension IRISMedia.AudioService: @preconcurrency AudioServiceProtocol {
+    // Already conforms - no changes needed
+}
+
+@MainActor
+extension SpeechService: @preconcurrency SpeechRecognitionService {
+    // Already conforms - no changes needed
+}
+
