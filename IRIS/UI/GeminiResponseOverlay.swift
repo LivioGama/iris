@@ -168,7 +168,9 @@ struct GeminiResponseOverlay: View {
             }
             .frame(maxWidth: 700)
         }
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .padding(.top, 12)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.9))
