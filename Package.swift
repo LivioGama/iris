@@ -14,6 +14,9 @@ let package = Package(
         .library(name: "IRISNetwork", targets: ["IRISNetwork"]),
         .library(name: "IRISMedia", targets: ["IRISMedia"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0")
+    ],
     targets: [
         // Core module: Models, protocols, security
         .target(
@@ -31,7 +34,11 @@ let package = Package(
         // Gaze module: Gaze tracking, Python integration
         .target(
             name: "IRISGaze",
-            dependencies: ["IRISCore", "IRISVision"],
+            dependencies: [
+                "IRISCore",
+                "IRISVision",
+                .product(name: "Atomics", package: "swift-atomics")
+            ],
             path: "IRISGaze/Sources"
         ),
 

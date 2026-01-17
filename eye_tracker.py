@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import struct
 import cv2
 import os
 import numpy as np
@@ -8,7 +9,30 @@ import mediapipe as mp
 
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
+# Binary protocol types
+TYPE_GAZE = 1
+TYPE_BLINK = 2
+TYPE_STATUS = 3
+TYPE_CALIBRATE = 4
+
 mp_face_mesh = mp.solutions.face_mesh
+
+def send_binary_gaze(x, y):
+    """Send gaze coordinates using binary protocol (17 bytes)"""
+    # Format: [uint8 type][float64 x][float64 y]
+    data = struct.pack('!Bdd', TYPE_GAZE, x, y)
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def send_binary_blink(x, y):
+    """Send blink event using binary protocol"""
+    data = struct.pack('!Bdd', TYPE_BLINK, x, y)
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def send_json_status(status):
+    """Send status messages (still use JSON for compatibility)"""
+    print(json.dumps({"status": status}), flush=True)
 
 def main():
     import argparse
@@ -37,9 +61,9 @@ def main():
     is_blinking = False
 
     # Long blink detection for screenshot trigger
-    # Normal blink: ~3-9 frames (0.1-0.3 seconds)
-    # Intentional long blink: 15-18 frames (0.5-0.6 seconds) - noticeable but not too long
-    LONG_BLINK_THRESH = 15
+    # Normal blink: ~3-5 frames (0.1-0.17 seconds)
+    # Intentional long blink: 8 frames (0.27 seconds) - clearly intentional
+    LONG_BLINK_THRESH = 8
     eyes_closed_counter = 0
     long_blink_triggered = False
 
@@ -86,31 +110,12 @@ def main():
                     blink_counter += 1
                     eyes_closed_counter += 1
 
-                    # Show progress feedback at key milestones
-                    # At 5 frames (~0.17s): indicate detection started
-                    # At 10 frames (~0.33s): halfway to trigger
-                    # At 15 frames (~0.5s): trigger!
-                    if eyes_closed_counter == 5:
-                        print(json.dumps({
-                            "status": "blink_detected_keep_closed"
-                        }), flush=True)
-                    elif eyes_closed_counter == 10:
-                        print(json.dumps({
-                            "status": "halfway_to_trigger"
-                        }), flush=True)
-
                     # Check for intentional long blink trigger
+                    # Trigger at 6 frames (~0.2s) - slightly longer than normal blink
                     if eyes_closed_counter >= LONG_BLINK_THRESH and not long_blink_triggered:
                         long_blink_triggered = True
-                        print(json.dumps({
-                            "status": "long_blink_triggered"
-                        }), flush=True)
-                        # Send blink event for screenshot
-                        print(json.dumps({
-                            "event": "blink",
-                            "x": ema_x,
-                            "y": ema_y
-                        }), flush=True)
+                        # Send blink event for screenshot using binary protocol
+                        send_binary_blink(ema_x, ema_y)
                 else:
                     if blink_counter >= EYE_AR_CONSEC_FRAMES:
                         is_blinking = True
@@ -163,14 +168,8 @@ def main():
                     ema_x = target_x
                     ema_y = target_y
 
-                print(json.dumps({
-                    "x": ema_x,
-                    "y": ema_y,
-                    "h": ema_x / screen_width,
-                    "v": ema_y / screen_height,
-                    "nose_x": ema_nose_x,
-                    "nose_y": ema_nose_y
-                }), flush=True)
+                # Send gaze coordinates using binary protocol (17 bytes)
+                send_binary_gaze(ema_x, ema_y)
 
             except Exception as e:
                 continue

@@ -9,10 +9,12 @@ struct OverlayView: View {
         ZStack {
             Color.clear
 
-            ContextualGazeIndicator(
-                gazePoint: coordinator.gazeEstimator.gazePoint,
-                detectedElement: coordinator.gazeEstimator.detectedElement
-            )
+            if coordinator.gazeEstimator.isTrackingEnabled {
+                ContextualGazeIndicator(
+                    gazePoint: coordinator.gazeEstimator.gazePoint,
+                    detectedElement: coordinator.gazeEstimator.detectedElement
+                )
+            }
 
             VStack {
                 Text(coordinator.gazeDebugInfo)

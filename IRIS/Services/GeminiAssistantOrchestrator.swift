@@ -88,12 +88,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             self.chatMessages.removeAll()
         }
 
-        // Start voice interaction
+        // Start voice interaction with 12-second timeout
         DispatchQueue.main.async {
             self.isListening = true
         }
 
-        voiceInteractionService.startListening { [weak self] prompt in
+        voiceInteractionService.startListening(timeout: 12.0) { [weak self] prompt in
             guard let self = self else { return }
 
             DispatchQueue.main.async {
@@ -102,6 +102,18 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
             }
 
             print("🎤 Prompt received: \(prompt)")
+
+            // Check for "stop" command to exit analysis mode
+            let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalizedPrompt == "stop" {
+                print("🛑 Stop command detected, returning to indicator mode")
+                DispatchQueue.main.async {
+                    self.capturedScreenshot = nil
+                    self.isProcessing = false
+                    self.chatMessages.removeAll()
+                }
+                return
+            }
 
             // Only process if there's actual input
             guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -467,11 +479,23 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject {
                 self.isListening = true
             }
 
-            self.voiceInteractionService.startListening { [weak self] followupPrompt in
+            self.voiceInteractionService.startListening(timeout: nil) { [weak self] followupPrompt in
                 guard let self = self else { return }
 
                 DispatchQueue.main.async {
                     self.isListening = false
+                }
+
+                // Check for "stop" command
+                let normalizedFollowup = followupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if normalizedFollowup == "stop" {
+                    print("🛑 Stop command detected, returning to indicator mode")
+                    DispatchQueue.main.async {
+                        self.capturedScreenshot = nil
+                        self.isProcessing = false
+                        self.chatMessages.removeAll()
+                    }
+                    return
                 }
 
                 if followupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

@@ -5,13 +5,22 @@ struct ContextualGazeIndicator: View {
     let gazePoint: CGPoint
     let detectedElement: DetectedElement?
 
+    // Enable Metal rendering for maximum performance (120 FPS capable)
+    // Set to false to use SwiftUI renderer (60 FPS)
+    private let useMetalRenderer = true
+
     var body: some View {
         ZStack {
             if let element = detectedElement {
                 DetectedElementView(element: element)
             }
 
-            SimpleGazeIndicator(point: gazePoint)
+            if useMetalRenderer {
+                MetalGazeIndicatorView(gazePoint: gazePoint)
+                    .allowsHitTesting(false)
+            } else {
+                OptimizedGazeIndicator(point: gazePoint)
+            }
         }
     }
 }

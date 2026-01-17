@@ -19,15 +19,17 @@ public class VoiceInteractionService: NSObject {
     }
 
     /// Starts speech recognition with automatic silence detection
-    /// - Parameter completion: Called with transcribed text when user stops speaking
-    public func startListening(completion: @escaping (String) -> Void) {
+    /// - Parameters:
+    ///   - timeout: Optional timeout in seconds. If nil, no timeout is applied.
+    ///   - completion: Called with transcribed text when user stops speaking
+    public func startListening(timeout: TimeInterval? = nil, completion: @escaping (String) -> Void) {
         SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
             guard let self = self else { return }
 
             DispatchQueue.main.async {
                 switch authStatus {
                 case .authorized:
-                    self.startRecording(completion: completion)
+                    self.startRecording(timeout: timeout, completion: completion)
                 case .denied, .restricted, .notDetermined:
                     print("❌ Speech recognition not authorized")
                     completion("")
@@ -38,7 +40,9 @@ public class VoiceInteractionService: NSObject {
         }
     }
 
-    private func startRecording(completion: @escaping (String) -> Void) {
+    private var timeoutTimer: Timer?
+
+    private func startRecording(timeout: TimeInterval?, completion: @escaping (String) -> Void) {
         // Prevent concurrent recordings
         if audioEngine.isRunning {
             print("⚠️ Audio engine already running, skipping")
@@ -94,6 +98,16 @@ public class VoiceInteractionService: NSObject {
             // Don't initialize lastTranscriptionTime - will be set when user speaks
             lastTranscriptionTime = nil
             startSilenceDetection(completion: completion, inputNode: inputNode, transcribedTextGetter: { transcribedText })
+
+            // Set up timeout if specified
+            if let timeout = timeout {
+                print("⏱️ Timeout set to \(timeout) seconds")
+                timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+                    guard let self = self else { return }
+                    print("⏱️ Timeout reached, stopping with current transcription")
+                    self.stopRecordingInternal(completion: completion, inputNode: inputNode, transcribedText: transcribedText)
+                }
+            }
         } catch {
             print("❌ Audio engine failed to start: \(error)")
             completion("")
@@ -128,6 +142,9 @@ public class VoiceInteractionService: NSObject {
         silenceCheckTimer?.invalidate()
         silenceCheckTimer = nil
 
+        timeoutTimer?.invalidate()
+        timeoutTimer = nil
+
         audioEngine.stop()
         inputNode.removeTap(onBus: 0)
 
@@ -145,6 +162,9 @@ public class VoiceInteractionService: NSObject {
     public func stopListening() {
         silenceCheckTimer?.invalidate()
         silenceCheckTimer = nil
+
+        timeoutTimer?.invalidate()
+        timeoutTimer = nil
 
         if audioEngine.isRunning {
             audioEngine.stop()

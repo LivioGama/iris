@@ -124,10 +124,13 @@ class IRISCoordinator: ObservableObject {
         }
 
         gazeEstimator.onBlinkDetected = { [weak self] point, element in
+            print("🎯 IRISCoordinator: onBlinkDetected callback triggered!")
             Task { @MainActor in
+                print("🎯 IRISCoordinator: Calling geminiAssistant.handleBlink")
                 self?.geminiAssistant.handleBlink(at: point, focusedElement: element)
             }
         }
+        print("✅ IRISCoordinator: Blink callback registered")
 
         audioService.onVoiceStart = { [weak self] in
             Task { @MainActor in

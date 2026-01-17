@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Combine
+import Atomics
 import IRISCore
 import IRISVision
 
@@ -27,11 +28,13 @@ public class GazeEstimator: ObservableObject {
     public var onRealTimeDetection: ((DetectedElement) -> Void)?
     public var onBlinkDetected: ((CGPoint, DetectedElement?) -> Void)?
 
-    private let lock = NSLock()
-    private var targetPoint: CGPoint = CGPoint(x: 960, y: 540)
+    // Lock-free atomics for target position (updated from Python thread)
+    // Using UInt64 bit pattern since Double isn't AtomicValue
+    private let targetXBits = ManagedAtomic<UInt64>(960.0.bitPattern)
+    private let targetYBits = ManagedAtomic<UInt64>(540.0.bitPattern)
     private var displayPoint: CGPoint = CGPoint(x: 960, y: 540)
 
-    private let springStiffness: CGFloat = 0.65 // Optimized for responsive tracking
+    private let springStiffness: CGFloat = 0.35 // Matched to original for smoothness
 
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
     private var timer: Timer?
@@ -54,6 +57,9 @@ public class GazeEstimator: ObservableObject {
     private let realTimeDetectionInterval: TimeInterval = 1.0 / 30.0 // Maintain 30 FPS element detection
     private let accessibilityDetector = AccessibilityDetector()
     private let computerVisionDetector = ComputerVisionDetector()
+
+    // Kalman filter for predictive smoothing
+    private var kalmanFilter = KalmanFilter()
 
     // Temporal Stability Filter (replaces buffer-based approach)
     private struct TemporalStability {
@@ -116,11 +122,14 @@ public class GazeEstimator: ObservableObject {
     public init() {
         if let screen = NSScreen.main {
             let center = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
-            targetPoint = center
+            targetXBits.store(UInt64(Double(center.x).bitPattern), ordering: .relaxed)
+            targetYBits.store(UInt64(Double(center.y).bitPattern), ordering: .relaxed)
             displayPoint = center
         }
         setupProcessManager()
-        startAnimationTimer()
+        Task { @MainActor in
+            self.startAnimationTimer()
+        }
     }
 
     private func setupProcessManager() {
@@ -159,23 +168,19 @@ public class GazeEstimator: ObservableObject {
         }
     }
 
+    @MainActor
     private func startAnimationTimer() {
         updateAnimationTimer()
     }
 
+    @MainActor
     private func updateAnimationTimer() {
-        Task { @MainActor [weak self] in
-            guard let self = self else { return }
+        // Invalidate existing timer
+        timer?.invalidate()
 
-            // Invalidate existing timer
-            self.timer?.invalidate()
-
-            // Always use 60 FPS for smooth gaze tracking - runs on main RunLoop
-            self.timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    self?.animateToTarget()
-                }
-            }
+        // Always use 60 FPS for smooth gaze tracking - runs on main RunLoop
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
+            self?.animateToTarget()
         }
     }
 
@@ -186,7 +191,9 @@ public class GazeEstimator: ObservableObject {
             currentFrameRateMode = newMode
             let fps = newMode == .highPerformance ? 60 : 15
             print("📊 Frame rate mode changed to \(fps) FPS (\(newMode == .highPerformance ? "high performance" : "low power"))")
-            updateAnimationTimer()
+            Task { @MainActor in
+                self.updateAnimationTimer()
+            }
         }
     }
 
@@ -194,25 +201,28 @@ public class GazeEstimator: ObservableObject {
         heavyProcessingActive = active
     }
 
-    @MainActor
     private func animateToTarget() {
-        lock.lock()
-        let target = targetPoint
+        // Lock-free atomic reads (no contention)
+        let rawTarget = CGPoint(
+            x: Double(bitPattern: targetXBits.load(ordering: .relaxed)),
+            y: Double(bitPattern: targetYBits.load(ordering: .relaxed))
+        )
+
+        // Kalman filter prediction (reduces perceived lag by 5-10ms)
+        let predictedTarget = kalmanFilter.update(measurement: rawTarget)
+
+        // Spring smoothing on predicted value
         var display = displayPoint
-        lock.unlock()
-
-        display.x += (target.x - display.x) * springStiffness
-        display.y += (target.y - display.y) * springStiffness
-
-        lock.lock()
+        display.x += (predictedTarget.x - display.x) * springStiffness
+        display.y += (predictedTarget.y - display.y) * springStiffness
         displayPoint = display
-        lock.unlock()
 
-        // Direct synchronous update - zero latency
-        self.gazePoint = display
-        self.updateHoverDetection(with: display)
-        self.triggerRealTimeDetection(at: display)
-        self.triggerGazeUpdate(with: display)
+        Task { @MainActor in
+            self.gazePoint = display
+            self.updateHoverDetection(with: display)
+            self.triggerRealTimeDetection(at: display)
+            self.triggerGazeUpdate(with: display)
+        }
     }
 
     private func triggerRealTimeDetection(at point: CGPoint) {
@@ -318,46 +328,84 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func parseOutput(_ data: Data) {
-        guard let str = String(data: data, encoding: .utf8) else { return }
-        let lines = str.components(separatedBy: "\n").filter { !$0.isEmpty }
+        var offset = 0
 
-        for line in lines {
-            guard let jsonData = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { continue }
+        while offset < data.count {
+            // Try to parse binary protocol first
+            if offset + 17 <= data.count {
+                let typeOffset = data.startIndex + offset
+                let type = data[typeOffset]
 
-            // Handle blink event
-            if let event = json["event"] as? String, event == "blink" {
-                if let x = json["x"] as? Double, let y = json["y"] as? Double {
-                    let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
+                // Binary protocol types: 1=gaze, 2=blink, 3=status, 4=calibrate
+                if type >= 1 && type <= 4 {
+                    // Extract x and y coordinates (network byte order = big endian)
+                    let xData = data.subdata(in: (typeOffset + 1)..<(typeOffset + 9))
+                    let yData = data.subdata(in: (typeOffset + 9)..<(typeOffset + 17))
+
+                    // Load as UInt64, swap bytes, then convert to Double
+                    let xBits = xData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian }
+                    let yBits = yData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian }
+                    let x = Double(bitPattern: xBits)
+                    let y = Double(bitPattern: yBits)
+
+                    switch type {
+                    case 1: // TYPE_GAZE
+                        // Lock-free atomic stores (from Python thread)
+                        targetXBits.store(xBits, ordering: .relaxed)
+                        targetYBits.store(yBits, ordering: .relaxed)
+
+                    case 2: // TYPE_BLINK
+                        let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
+                        print("👁️ BLINK DETECTED at (\(x), \(y))")
+                        Task { @MainActor in
+                            print("👁️ Calling onBlinkDetected handler")
+                            self.onBlinkDetected?(blinkPoint, self.detectedElement)
+                        }
+
+                    default:
+                        break
+                    }
+
+                    offset += 17
+                    continue
+                }
+            }
+
+            // Fallback to JSON parsing for status messages
+            // Find next newline for JSON message boundary
+            let remainingData = data.subdata(in: (data.startIndex + offset)..<data.endIndex)
+            guard let str = String(data: remainingData, encoding: .utf8) else { break }
+
+            let lines = str.components(separatedBy: "\n")
+            guard let line = lines.first, !line.isEmpty else { break }
+
+            // Parse JSON status messages
+            if let jsonData = line.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+
+                if let status = json["status"] as? String {
+                    print("📊 Status message: \(status)")
                     Task { @MainActor in
-                        self.onBlinkDetected?(blinkPoint, self.detectedElement)
+                        if status.starts(with: "calibrate_") {
+                            let corner = String(status.dropFirst(10))
+                            self.calibrationCorner = CalibrationCorner(rawValue: corner) ?? .none
+                            self.debugInfo = "Look at \(corner)"
+                        } else if status == "calibrated" {
+                            self.calibrationCorner = .done
+                            self.debugInfo = "Ready"
+                            self.isTracking = true
+                        } else if status.contains("blink") || status.contains("trigger") {
+                            print("👁️ Blink status: \(status)")
+                            self.debugInfo = status
+                        } else {
+                            self.debugInfo = status
+                        }
                     }
                 }
-                continue
             }
 
-            if let status = json["status"] as? String {
-                Task { @MainActor in
-                    if status.starts(with: "calibrate_") {
-                        let corner = String(status.dropFirst(10))
-                        self.calibrationCorner = CalibrationCorner(rawValue: corner) ?? .none
-                        self.debugInfo = "Look at \(corner)"
-                    } else if status == "calibrated" {
-                        self.calibrationCorner = .done
-                        self.debugInfo = "Ready"
-                        self.isTracking = true
-                    } else {
-                        self.debugInfo = status
-                    }
-                }
-                continue
-            }
-
-            guard let x = json["x"] as? Double, let y = json["y"] as? Double else { continue }
-
-            lock.lock()
-            targetPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
-            lock.unlock()
+            // Move past this JSON line
+            offset += line.utf8.count + 1 // +1 for newline
         }
     }
 
