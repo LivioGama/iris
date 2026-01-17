@@ -86,11 +86,7 @@ struct GeminiResponseOverlay: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: 500, maxHeight: 600)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
+                    .clipped()
             }
 
             // Right side: Listening status and chat
@@ -168,15 +164,14 @@ struct GeminiResponseOverlay: View {
             }
             .frame(maxWidth: 700)
         }
-        .padding(.leading, 0)
-        .padding(.trailing, 24)
-        .padding(.bottom, 24)
-        .padding(.top, 0)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.9))
                 .shadow(color: Color.black.opacity(0.4), radius: 30)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.trailing, 24)
+        .padding(.bottom, 24)
         .overlay(
             // Close button in top-right corner
             VStack {
