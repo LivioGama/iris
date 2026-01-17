@@ -37,8 +37,9 @@ struct OverlayView: View {
         let isMacBookScreen = screen.frame.width == 1800 && screen.frame.height == 1169
 
         if isExternalScreen {
-            // EXTERNAL screen 3840×1600 - Python coords match directly
-            return globalPoint
+            // EXTERNAL screen 3840×1600 - Vertical offset to compensate for screen above camera
+            // Shift indicator down from where you're looking
+            return CGPoint(x: globalPoint.x, y: globalPoint.y + 700)
         } else if isMacBookScreen {
             // MacBook screen 1800×1169 - scale DOWN from 3840×1600
             let scaleX = 1800.0 / 3840.0  // 0.469
