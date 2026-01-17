@@ -71,13 +71,15 @@ class IRISCoordinator: ObservableObject {
 
     private func setupBindings() {
         // Monitor Gemini response to enable/disable mouse events for close button and chat messages
-        Publishers.CombineLatest(
+        Publishers.CombineLatest3(
             geminiAssistant.$geminiResponse,
-            geminiAssistant.$chatMessages
+            geminiAssistant.$chatMessages,
+            geminiAssistant.$capturedScreenshot
         )
         .receive(on: RunLoop.main)
-        .sink { [weak self] response, chatMessages in
-            self?.shouldAcceptMouseEvents = !response.isEmpty || !chatMessages.isEmpty
+        .sink { [weak self] response, chatMessages, screenshot in
+            // Accept mouse events when overlay is active (screenshot captured or messages present)
+            self?.shouldAcceptMouseEvents = screenshot != nil || !chatMessages.isEmpty || !response.isEmpty
         }
         .store(in: &cancellables)
 

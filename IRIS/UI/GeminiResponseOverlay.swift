@@ -78,100 +78,124 @@ struct GeminiResponseOverlay: View {
     }
 
     private var mainContentView: some View {
-        // Single unified overlay container
-        HStack(alignment: .top, spacing: 20) {
-            // Left side: Screenshot preview
-            if let screenshot = geminiService.capturedScreenshot {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(nsImage: screenshot)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 500, maxHeight: 600)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
+        // Fixed-size overlay container - doesn't move when messages are added
+        VStack(spacing: 0) {
+            // Top bar with close button
+            HStack {
+                Spacer()
+                Button(action: {
+                    print("❌ Close button clicked!")
+                    closeResponse()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 24))
+                        .padding(8)
                 }
-            }
-
-            // Right side: Listening status and chat
-            VStack(alignment: .leading, spacing: 12) {
-                // Always show listening status in overlay
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(geminiService.isListening ? Color.red : Color.green)
-                        .frame(width: 12, height: 12)
-                        .overlay(
-                            Circle()
-                                .stroke(geminiService.isListening ? Color.red : Color.green, lineWidth: 2)
-                                .scaleEffect(1.5)
-                                .opacity(0.5)
-                        )
-
-                    if geminiService.isListening {
-                        Text("Listening...")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                    } else if geminiService.isProcessing {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-
-                        Text("Processing...")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
                     } else {
-                        Text("Ready...")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-
-                    // Show countdown if timeout is active
-                    if let remaining = geminiService.remainingTimeout {
-                        Text("\(Int(ceil(remaining)))s")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.6))
-                            .monospacedDigit()
-                    }
-                }
-
-                // Chat messages
-                if !geminiService.chatMessages.isEmpty {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(geminiService.chatMessages) { message in
-                                    ChatMessageView(message: message)
-                                        .environmentObject(geminiService)
-                                        .id(message.id)
-                                }
-                            }
-                        }
-                        .frame(maxHeight: 600)
-                        .onChange(of: geminiService.chatMessages.count) { _ in
-                            // Scroll to the last message when new messages are added
-                            if let lastMessage = geminiService.chatMessages.last {
-                                withAnimation {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                        .onChange(of: geminiService.chatMessages.last?.content) { _ in
-                            // Scroll when message content changes (e.g., loading bubble replaced with actual text)
-                            if let lastMessage = geminiService.chatMessages.last {
-                                withAnimation {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
+                        NSCursor.pop()
                     }
                 }
             }
-            .frame(maxWidth: 700, alignment: .leading)
-            .frame(minHeight: 60)
+            .frame(height: 44)
+
+            // Main content area
+            HStack(alignment: .top, spacing: 20) {
+                // Left side: Screenshot preview
+                if let screenshot = geminiService.capturedScreenshot {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Image(nsImage: screenshot)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 500, maxHeight: 600)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                }
+
+                // Right side: Listening status and chat
+                VStack(alignment: .leading, spacing: 12) {
+                    // Always show listening status in overlay
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(geminiService.isListening ? Color.red : Color.green)
+                            .frame(width: 12, height: 12)
+                            .overlay(
+                                Circle()
+                                    .stroke(geminiService.isListening ? Color.red : Color.green, lineWidth: 2)
+                                    .scaleEffect(1.5)
+                                    .opacity(0.5)
+                            )
+
+                        if geminiService.isListening {
+                            Text("Listening...")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.white)
+                        } else if geminiService.isProcessing {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+
+                            Text("Processing...")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                        } else {
+                            Text("Ready...")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.white)
+                        }
+
+                        // Show countdown if timeout is active
+                        if let remaining = geminiService.remainingTimeout {
+                            Text("\(Int(ceil(remaining)))s")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.6))
+                                .monospacedDigit()
+                        }
+                    }
+
+                    // Chat messages
+                    if !geminiService.chatMessages.isEmpty {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    ForEach(geminiService.chatMessages) { message in
+                                        ChatMessageView(message: message)
+                                            .environmentObject(geminiService)
+                                            .id(message.id)
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 600)
+                            .onChange(of: geminiService.chatMessages.count) { _ in
+                                if let lastMessage = geminiService.chatMessages.last {
+                                    withAnimation {
+                                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                    }
+                                }
+                            }
+                            .onChange(of: geminiService.chatMessages.last?.content) { _ in
+                                if let lastMessage = geminiService.chatMessages.last {
+                                    withAnimation {
+                                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: 700, alignment: .leading)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
         }
-        .padding(24)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.9))
@@ -179,33 +203,6 @@ struct GeminiResponseOverlay: View {
         )
         .padding(.horizontal, 40)
         .padding(.bottom, 40)
-        .overlay(alignment: .topTrailing) {
-            // Close button - positioned OUTSIDE the content padding
-            Button(action: {
-                print("❌ Close button clicked!")
-                closeResponse()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: "xmark")
-                        .foregroundColor(.white)
-                        .font(.system(size: 18, weight: .bold))
-                }
-            }
-            .buttonStyle(.plain)
-            .offset(x: -32, y: 32)
-            .zIndex(1000)
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-        }
     }
 
     private var listeningView: some View {
