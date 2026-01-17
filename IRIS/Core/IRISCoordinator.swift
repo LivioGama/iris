@@ -95,7 +95,6 @@ class IRISCoordinator: ObservableObject {
         .store(in: &cancellables)
 
         gazeEstimator.$gazePoint
-            .receive(on: RunLoop.main)
             .sink { [weak self] point in
                 self?.gazePoint = point
                 self?.intentTrigger.updateGaze(point)

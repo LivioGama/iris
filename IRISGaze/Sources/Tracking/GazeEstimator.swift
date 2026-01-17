@@ -31,7 +31,7 @@ public class GazeEstimator: ObservableObject {
     private var targetPoint: CGPoint = CGPoint(x: 960, y: 540)
     private var displayPoint: CGPoint = CGPoint(x: 960, y: 540)
 
-    private let springStiffness: CGFloat = 0.35 // Increased from 0.15 for snappier visual response
+    private let springStiffness: CGFloat = 0.65 // Optimized for responsive tracking
 
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
     private var timer: Timer?
@@ -164,18 +164,17 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func updateAnimationTimer() {
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
 
             // Invalidate existing timer
             self.timer?.invalidate()
 
-            // Determine frame rate based on current mode
-            let frameInterval = self.currentFrameRateMode == .highPerformance ? self.highPerformanceFPS : self.lowPowerFPS
-
-            // Create new timer with adaptive frame rate
-            self.timer = Timer.scheduledTimer(withTimeInterval: frameInterval, repeats: true) { [weak self] _ in
-                self?.animateToTarget()
+            // Always use 60 FPS for smooth gaze tracking - runs on main RunLoop
+            self.timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.animateToTarget()
+                }
             }
         }
     }
@@ -195,6 +194,7 @@ public class GazeEstimator: ObservableObject {
         heavyProcessingActive = active
     }
 
+    @MainActor
     private func animateToTarget() {
         lock.lock()
         let target = targetPoint
@@ -208,12 +208,11 @@ public class GazeEstimator: ObservableObject {
         displayPoint = display
         lock.unlock()
 
-        Task { @MainActor in
-            self.gazePoint = display
-            self.updateHoverDetection(with: display)
-            self.triggerRealTimeDetection(at: display)
-            self.triggerGazeUpdate(with: display)
-        }
+        // Direct synchronous update - zero latency
+        self.gazePoint = display
+        self.updateHoverDetection(with: display)
+        self.triggerRealTimeDetection(at: display)
+        self.triggerGazeUpdate(with: display)
     }
 
     private func triggerRealTimeDetection(at point: CGPoint) {

@@ -10,7 +10,7 @@ struct OverlayView: View {
             Color.clear
 
             ContextualGazeIndicator(
-                gazePoint: coordinator.gazePoint,
+                gazePoint: coordinator.gazeEstimator.gazePoint,
                 detectedElement: coordinator.gazeEstimator.detectedElement
             )
 
@@ -28,7 +28,7 @@ struct OverlayView: View {
 
             if coordinator.currentState == .processing {
                 ProcessingIndicator()
-                    .position(x: coordinator.gazePoint.x, y: coordinator.gazePoint.y - 60)
+                    .position(x: coordinator.gazeEstimator.gazePoint.x, y: coordinator.gazeEstimator.gazePoint.y - 60)
             }
 
             if let intent = coordinator.lastIntent {
