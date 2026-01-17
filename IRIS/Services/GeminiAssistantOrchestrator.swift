@@ -273,6 +273,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         // Optimized check: no actor hop for every buffer
         if isListeningForBuffers {
             bufferCount += 1
+            if bufferCount == 1 {
+                print("🎤 FIRST AUDIO BUFFER RECEIVED!")
+            }
             if bufferCount % 100 == 0 {
                 print("🎤 Received \(bufferCount) audio buffers")
             }
@@ -996,9 +999,24 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             // Stop timer when countdown reaches zero
             if remaining <= 0 {
+                print("⏱️ Timeout reached! Closing overlay and resetting state")
                 self.countdownTimer?.invalidate()
                 self.countdownTimer = nil
                 self.remainingTimeout = nil
+
+                // Stop voice listening
+                self.voiceInteractionService.stopListening()
+
+                // CRITICAL: Reset listening state so future blinks work
+                self.isListening = false
+                self.isListeningForBuffers = false
+                self.isProcessing = false
+
+                // Close overlay and resume gaze indicator
+                self.chatMessages.removeAll()
+                self.capturedScreenshot = nil
+                self.liveTranscription = ""
+                self.transcribedText = ""
             }
         }
 

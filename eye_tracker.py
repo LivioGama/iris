@@ -55,15 +55,15 @@ def main():
     ema_nose_x, ema_nose_y = 0.5, 0.5
 
     # Blink detection thresholds
-    EYE_AR_THRESH = 0.25  # Increased threshold - easier to trigger
+    EYE_AR_THRESH = 0.30  # Higher threshold - easier to trigger
     EYE_AR_CONSEC_FRAMES = 2
     blink_counter = 0
     is_blinking = False
 
     # Long blink detection for screenshot trigger
     # Normal blink: ~3-5 frames (0.1-0.17 seconds)
-    # Intentional long blink: 4 frames (0.13 seconds) - responsive
-    LONG_BLINK_THRESH = 4
+    # Intentional long blink: 3 frames (0.1 seconds) - very responsive
+    LONG_BLINK_THRESH = 3
 
     # Debug: print eye aspect ratio every 30 frames
     frame_debug_counter = 0
