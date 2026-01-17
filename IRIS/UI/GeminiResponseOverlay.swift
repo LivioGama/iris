@@ -3,7 +3,7 @@ import IRISCore
 import IRISNetwork
 
 struct GeminiResponseOverlay: View {
-    @ObservedObject var geminiService: GeminiAssistantService
+    @ObservedObject var geminiService: GeminiAssistantOrchestrator
 
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
@@ -251,7 +251,7 @@ struct GeminiResponseOverlay: View {
 // Individual chat message view
 struct ChatMessageView: View {
     let message: ChatMessage
-    @EnvironmentObject var geminiService: GeminiAssistantService
+    @EnvironmentObject var geminiService: GeminiAssistantOrchestrator
 
     private var messageItems: [(number: Int, text: String)] {
         parseNumberedList(from: message.content)

@@ -3,7 +3,7 @@ import NaturalLanguage
 import IRISCore
 
 public struct SentimentAnalysisResponse: Codable {
-    let analysis: String
+    public let analysis: String
 }
 
 // Gemini API structures
@@ -31,7 +31,7 @@ public struct GeminiAnalysisResponse: Codable {
 }
 
 public class SentimentAnalysisService {
-    static let shared = SentimentAnalysisService()
+    public static let shared = SentimentAnalysisService()
 
     private let apiKey: String
 

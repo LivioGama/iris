@@ -17,7 +17,7 @@ class IRISCoordinator: ObservableObject {
     let intentTrigger = IntentTrigger()
     let intentResolver = IntentResolver()
     let contextualAnalysis = ContextualAnalysisService()
-    let geminiAssistant = GeminiAssistantService()
+    let geminiAssistant = GeminiAssistantOrchestrator()
 
     @Published var isActive = false
     @Published var currentState: IntentTrigger.State = .idle
