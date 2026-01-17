@@ -168,7 +168,8 @@ struct GeminiResponseOverlay: View {
                     }
                 }
             }
-            .frame(maxWidth: 700)
+            .frame(maxWidth: 700, alignment: .leading)
+            .frame(minHeight: 60)
         }
         .padding(24)
         .background(
@@ -176,34 +177,35 @@ struct GeminiResponseOverlay: View {
                 .fill(Color.black.opacity(0.9))
                 .shadow(color: Color.black.opacity(0.4), radius: 30)
         )
-        .overlay(
-            // Close button in top-right corner
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        closeResponse()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.white.opacity(0.7))
-                            .font(.system(size: 22))
-                            .padding(12)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .onHover { hovering in
-                        if hovering {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                }
-                Spacer()
-            }
-        )
         .padding(.horizontal, 40)
         .padding(.bottom, 40)
+        .overlay(alignment: .topTrailing) {
+            // Close button - positioned OUTSIDE the content padding
+            Button(action: {
+                print("❌ Close button clicked!")
+                closeResponse()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 40, height: 40)
+
+                    Image(systemName: "xmark")
+                        .foregroundColor(.white)
+                        .font(.system(size: 18, weight: .bold))
+                }
+            }
+            .buttonStyle(.plain)
+            .offset(x: -32, y: 32)
+            .zIndex(1000)
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+        }
     }
 
     private var listeningView: some View {
