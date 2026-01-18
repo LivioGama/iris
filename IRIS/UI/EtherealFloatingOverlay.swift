@@ -107,8 +107,8 @@ struct EtherealFloatingOverlay: View {
 
                 if showGradient {
                     bigGeminiStar
-                        .scaleEffect(1.54)  // 154% (10% bigger than 140%)
-                        .opacity(0.35)  // Darker/less opacity (was 0.48)
+                        .scaleEffect(1.54)
+                        .opacity(0.35)
                         .transition(.opacity)
                 }
 
@@ -138,11 +138,53 @@ struct EtherealFloatingOverlay: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         // Show ALL finalized messages from chatMessages
-                        ForEach(geminiService.chatMessages) { message in
+                        ForEach(Array(geminiService.chatMessages.enumerated()), id: \.element.id) { index, message in
                             if message.role == .user {
                                 userInputBubble(text: message.content, isLive: false)
                             } else {
+                                // Divider BEFORE Gemini response
+                                Spacer()
+                                    .frame(height: 30)
+
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(hex: "4796E3").opacity(0.5),
+                                                Color(hex: "9177C7").opacity(0.5)
+                                            ],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: 400, height: 1)
+                                    .shadow(color: Color(hex: "4796E3").opacity(0.6), radius: 4)
+
+                                Spacer()
+                                    .frame(height: 30)
+
                                 geminiResponseBubble(text: message.content, isStreaming: false)
+
+                                // Divider AFTER Gemini response
+                                Spacer()
+                                    .frame(height: 30)
+
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(hex: "9177C7").opacity(0.5),
+                                                Color(hex: "4796E3").opacity(0.5)
+                                            ],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: 400, height: 1)
+                                    .shadow(color: Color(hex: "9177C7").opacity(0.6), radius: 4)
+
+                                Spacer()
+                                    .frame(height: 30)
                             }
                         }
 
@@ -774,23 +816,6 @@ struct EtherealFloatingOverlay: View {
     private func dreamChatBubble(_ message: ChatMessage) -> some View {
         // Center all messages
         VStack(spacing: 4) {
-            // Divider before assistant message
-            if message.role == .assistant {
-                Spacer().frame(height: 30)
-                Rectangle()
-                    .fill(LinearGradient(
-                        colors: [
-                            Color(hex: "4796E3").opacity(0.5),
-                            Color(hex: "9177C7").opacity(0.5)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ))
-                    .frame(width: 400, height: 1)
-                    .shadow(color: Color(hex: "4796E3").opacity(0.6), radius: 4)
-                Spacer().frame(height: 30)
-            }
-
             Text(message.content)
                 .font(.system(size: 20, weight: .light, design: .rounded))
                 .foregroundColor(.white)  // Solid white for readability
@@ -812,23 +837,6 @@ struct EtherealFloatingOverlay: View {
                     color: (message.role == .user ? Color(hex: "4796E3") : Color(hex: "9177C7")).opacity(0.4),
                     radius: 15
                 )
-
-            // Divider after assistant message
-            if message.role == .assistant {
-                Spacer().frame(height: 30)
-                Rectangle()
-                    .fill(LinearGradient(
-                        colors: [
-                            Color(hex: "9177C7").opacity(0.5),
-                            Color(hex: "4796E3").opacity(0.5)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ))
-                    .frame(width: 400, height: 1)
-                    .shadow(color: Color(hex: "9177C7").opacity(0.6), radius: 4)
-                Spacer().frame(height: 30)
-            }
         }
         .frame(maxWidth: 700)
     }
