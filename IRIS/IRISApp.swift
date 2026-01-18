@@ -208,22 +208,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupOverlayWindows() {
         for screen in NSScreen.screens {
-            let window = NSWindow(
+            let window = PassThroughWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
                 backing: .buffered,
-                defer: false
+                defer: false,
+                coordinator: coordinator
             )
 
-            window.level = .normal  // Normal level so other windows can be on top
+            window.level = .statusBar  // Always on top, above all other windows
             window.isOpaque = false
             window.backgroundColor = .clear
-            window.ignoresMouseEvents = true
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            // Don't use ignoresMouseEvents - let SwiftUI views control hit testing
+            // window.ignoresMouseEvents = true
+            window.acceptsMouseMovedEvents = false
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             window.hasShadow = false
 
             let hostingView = NSHostingView(rootView: OverlayView(screen: screen).environmentObject(coordinator))
             window.contentView = hostingView
+
+            // Ensure the window is ordered front but doesn't become key
+            window.makeKeyAndOrderFront(nil)
+            window.resignKey()
 
             overlayWindows.append(window)
         }
@@ -245,5 +252,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         print("Microphone permission: \(micGranted)")
+    }
+}
+
+/// Custom window that passes through mouse events when Gemini overlay is inactive
+class PassThroughWindow: NSWindow {
+    weak var coordinator: IRISCoordinator?
+    private var updateTimer: Timer?
+
+    // CRITICAL: Override to prevent focus stealing
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool, coordinator: IRISCoordinator) {
+        self.coordinator = coordinator
+        super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+
+        // Start timer to update ignoresMouseEvents based on Gemini state
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.updateMouseEventHandling()
+        }
+    }
+
+    private func updateMouseEventHandling() {
+        // ALWAYS pass through - never block clicks or window switching
+        // The overlay SwiftUI views will handle their own hit testing
+        self.ignoresMouseEvents = true
+    }
+
+    deinit {
+        updateTimer?.invalidate()
     }
 }

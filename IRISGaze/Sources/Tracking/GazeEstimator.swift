@@ -238,6 +238,8 @@ public class GazeEstimator: ObservableObject {
 
         Task { @MainActor in
             self.gazePoint = display
+            // Update current screen based on gaze point
+            self.currentScreen = NSScreen.screens.first(where: { $0.frame.contains(display) })
             self.updateHoverDetection(with: display)
             self.triggerRealTimeDetection(at: display)
             self.triggerGazeUpdate(with: display)
@@ -292,9 +294,20 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func accessibilityCoordinates(for point: CGPoint, on screen: NSScreen) -> (CGPoint, String) {
-        let scaledPoint = scaledPointForScreen(point, screen: screen)
+        var scaledPoint = scaledPointForScreen(point, screen: screen)
+
+        // Apply camera offset compensation for external screen (3840x1600)
+        // Camera is positioned below the screen, so gaze coordinates need offset
+        // Apply BEFORE clamping so we can detect elements at the top
+        let isExternalScreen = screen.frame.width == 3840 && screen.frame.height == 1600
+        if isExternalScreen {
+            scaledPoint.y += 700
+        }
+
         let clampedX = min(max(scaledPoint.x, 0), screen.frame.width)
-        let clampedYFromTop = min(max(scaledPoint.y, 0), screen.frame.height)
+        // For external screen, allow coordinates beyond screen height to account for offset
+        let maxY = isExternalScreen ? screen.frame.height + 700 : screen.frame.height
+        let clampedYFromTop = min(max(scaledPoint.y, 0), maxY)
 
         // Convert to global AppKit coordinates
         let localX = clampedX
@@ -314,12 +327,19 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func scaledPointForScreen(_ point: CGPoint, screen: NSScreen) -> CGPoint {
-        if screen.frame.size == calibrationResolution {
-            return point
+        var scaledPoint = point
+
+        // Scale if needed
+        if screen.frame.size != calibrationResolution {
+            let scaleX = screen.frame.width / calibrationResolution.width
+            let scaleY = screen.frame.height / calibrationResolution.height
+            scaledPoint = CGPoint(x: point.x * scaleX, y: point.y * scaleY)
         }
-        let scaleX = screen.frame.width / calibrationResolution.width
-        let scaleY = screen.frame.height / calibrationResolution.height
-        return CGPoint(x: point.x * scaleX, y: point.y * scaleY)
+
+        // NOTE: Camera offset is NOT applied here - it's applied in accessibilityCoordinates
+        // after clamping to avoid cutting off the top of the screen
+
+        return scaledPoint
     }
 
     private func triggerGazeUpdate(with point: CGPoint) {
@@ -438,9 +458,13 @@ public class GazeEstimator: ObservableObject {
 
                     case 2: // TYPE_BLINK
                         let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
-                        print("👁️ BLINK DETECTED at (\(x), \(y))")
+                        let msg = "👁️ BLINK DETECTED at (\(x), \(y)) - handler=\(self.onBlinkDetected != nil)"
+                        print(msg)
+                        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
                         Task { @MainActor in
-                            print("👁️ Calling onBlinkDetected handler")
+                            let msg2 = "👁️ Calling onBlinkDetected handler on main thread"
+                            print(msg2)
+                            try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
                             self.onBlinkDetected?(blinkPoint, self.detectedElement)
                         }
 

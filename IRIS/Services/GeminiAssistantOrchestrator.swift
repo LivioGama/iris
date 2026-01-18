@@ -5,6 +5,7 @@ import IRISCore
 import IRISNetwork
 import IRISMedia
 import IRISVision
+import IRISGaze
 import GoogleGenerativeAI
 
 // MARK: - ICOI Services
@@ -24,7 +25,13 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var liveGeminiResponse = "" // Real-time streaming Gemini response
     @Published public var chatMessages: [ChatMessage] = []
     @Published public var isProcessing = false
-    @Published public var capturedScreenshot: NSImage?
+    @Published public var capturedScreenshot: NSImage? {
+        didSet {
+            let msg = "📸 capturedScreenshot changed: \(capturedScreenshot != nil ? "SET" : "CLEARED")"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+        }
+    }
     @Published public var remainingTimeout: TimeInterval? = nil
     @Published public var parsedICOIResponse: ICOIParsedResponse?
     @Published public var currentIntent: ICOIIntent = .general // Current classified intent for UI layout
@@ -35,6 +42,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     internal let voiceInteractionService: VoiceInteractionService
     private let messageExtractionService: MessageExtractionService
     private let screenshotService: ScreenshotService
+    private let gazeEstimator: GazeEstimator
     private let sentimentAnalysisService = SentimentAnalysisService.shared
     private let visionTextDetector = VisionTextDetector()
 
@@ -55,7 +63,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
     // Blink cooldown
     private var lastBlinkTime: Date?
-    private let blinkCooldownPeriod: TimeInterval = 2.0  // 2 seconds cooldown
+    private let blinkCooldownPeriod: TimeInterval = 5.0  // 5 seconds cooldown to prevent accidental re-opening
 
     // Prompts
     private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
@@ -66,7 +74,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         conversationManager: ConversationManager,
         voiceInteractionService: VoiceInteractionService,
         messageExtractionService: MessageExtractionService,
-        screenshotService: ScreenshotService
+        screenshotService: ScreenshotService,
+        gazeEstimator: GazeEstimator
     ) {
         print("🚀🚀🚀 GeminiAssistantOrchestrator init() called - NEW CODE with Gemini 3.0 Flash classification!")
         self.geminiClient = geminiClient
@@ -74,6 +83,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         self.voiceInteractionService = voiceInteractionService
         self.messageExtractionService = messageExtractionService
         self.screenshotService = screenshotService
+        self.gazeEstimator = gazeEstimator
 
         print("🔑 GeminiAssistantOrchestrator initialized with shared client")
         super.init()
@@ -88,34 +98,54 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     }
 
     public func handleBlink(at point: CGPoint, focusedElement: DetectedElement?) {
+        let msg = "🔵 handleBlink() called at \(point) - chatMessages.count=\(chatMessages.count), screenshot=\(capturedScreenshot != nil), isListening=\(isListening), isProcessing=\(isProcessing)"
+        print(msg)
+        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+
         // Ignore blinks when overlay is already open (has chat messages or screenshot)
         guard chatMessages.isEmpty && capturedScreenshot == nil else {
-            print("⚠️ Overlay already open, ignoring blink")
+            let msg = "⚠️ Overlay already open, ignoring blink"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
             return
         }
 
         // Prevent concurrent blink handling
         guard !isListening && !isProcessing else {
-            print("⚠️ Already processing a blink, skipping")
+            let msg = "⚠️ Already processing a blink, skipping"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
             return
         }
 
         // Cooldown check - prevent rapid re-triggering
         if let lastBlink = lastBlinkTime, Date().timeIntervalSince(lastBlink) < blinkCooldownPeriod {
-            print("⚠️ Blink cooldown active, skipping")
+            let msg = "⚠️ Blink cooldown active, skipping (cooldown: \(blinkCooldownPeriod)s)"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
             return
         }
 
         lastBlinkTime = Date()
-        print("🔵 Blink detected at \(point)")
+        let msg2 = "🔵 Blink detected at \(point) - PASSED all guards, proceeding to screenshot"
+        print(msg2)
+        try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
 
-        // Capture screenshot at gaze point (screen where user is looking)
-        guard let gazeScreen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
-            print("❌ No screen found at gaze point \(point)")
+        // Use the screen where the mouse cursor is (controlled by gaze tracking)
+        // This is simpler and doesn't require MainActor isolation
+        let mouseLocation = NSEvent.mouseLocation
+        guard let gazeScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main else {
+            let msg = "❌ No screen found at mouse location \(mouseLocation)"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
             self.isProcessing = false
             self.isListening = false
             return
         }
+
+        let msg3 = "✅ Using screen at mouse location \(mouseLocation): \(gazeScreen.frame), capturing screenshot..."
+        print(msg3)
+        try? msg3.appendLine(to: "/tmp/iris_blink_debug.log")
 
         guard let screenshot = screenshotService.captureScreen(gazeScreen) else {
             print("❌ Failed to capture screenshot")
@@ -135,6 +165,21 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 print("❌ Fallback screenshot also failed, ignoring blink")
                 return
             }
+        }
+
+        // Note: Bounding box is already visible in the screenshot since we capture
+        // the overlay layer. No need to draw it programmatically.
+        if let element = focusedElement {
+            print("🎯 Captured screenshot with visible highlight for: \(element.label) at \(element.bounds)")
+        }
+
+        // DEBUG: Save screenshot to file for debugging
+        if let tiffData = finalScreenshot.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmap.representation(using: .png, properties: [:]) {
+            let debugPath = "/tmp/iris_debug_screenshot.png"
+            try? pngData.write(to: URL(fileURLWithPath: debugPath))
+            print("🐛 DEBUG: Saved screenshot to \(debugPath) (size: \(finalScreenshot.size))")
         }
 
         // Store screenshot and focused element
@@ -318,17 +363,25 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     /// Resets the entire conversation state including history
     /// Call this when closing the overlay to prevent context bleed between sessions
     public func resetConversationState() {
-        print("🔄 Resetting conversation state")
+        let msg = "🔄 Resetting conversation state - CLEARING EVERYTHING"
+        print(msg)
+        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
 
         // Set cooldown to prevent immediate reopening
         self.lastBlinkTime = Date()
-        print("🛑 Set cooldown to prevent immediate reopening")
+        let msg2 = "🛑 Set cooldown to prevent immediate reopening"
+        print(msg2)
+        try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
 
         // Clear conversation history in ConversationManager
         conversationManager.clearHistory()
 
         // Clear all UI state
         DispatchQueue.main.async {
+            let msg3 = "🧹 Clearing all UI state including screenshot, chat messages, and flags"
+            print(msg3)
+            try? msg3.appendLine(to: "/tmp/iris_blink_debug.log")
+
             self.chatMessages.removeAll()
             self.geminiResponse = ""
             self.liveGeminiResponse = ""
@@ -633,16 +686,27 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         if let element = focusedElement {
             let centerX = element.bounds.midX
             let centerY = element.bounds.midY
+            let width = element.bounds.width
+            let height = element.bounds.height
 
             fullPrompt += """
 
 
-            🎯 FOCUS AREA:
-            The user is looking at: "\(element.label)" (type: \(element.type))
-            Location on screen: approximately at (\(Int(centerX)), \(Int(centerY)))
+            🎯 FOCUSED REGION (HIGHLIGHTED IN BLUE):
+            The screenshot contains a BLUE BOUNDING BOX highlighting the area the user is focused on.
 
-            CRITICAL: Focus your analysis ONLY on this specific area in the screenshot. Ignore other parts of the screen.
-            Look at the content around the coordinates (\(Int(centerX)), \(Int(centerY))) in the image.
+            **Element Details:**
+            - Label: "\(element.label)"
+            - Type: \(element.type)
+            - Bounding Box: x=\(Int(element.bounds.minX)), y=\(Int(element.bounds.minY)), width=\(Int(width)), height=\(Int(height))
+            - Center: (\(Int(centerX)), \(Int(centerY)))
+            - Confidence: \(String(format: "%.1f%%", element.confidence * 100))
+
+            **CRITICAL INSTRUCTIONS:**
+            - The BLUE BORDERED RECTANGLE in the image marks the exact region the user is looking at
+            - Focus your primary analysis on the content INSIDE this blue box
+            - Use surrounding context to better understand the focused element, but prioritize the highlighted region
+            - The user's question pertains specifically to this highlighted area
             """
         }
 

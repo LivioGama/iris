@@ -309,7 +309,21 @@ public class PythonProcessManager {
                 return
             }
 
+            // Write to both console and debug file
             print("⚠️ PythonProcessManager stderr: \(errorStr)")
+
+            // Also write to a debug file for easier inspection
+            let debugPath = "/tmp/iris_python_debug.log"
+            if let fileHandle = FileHandle(forWritingAtPath: debugPath) {
+                fileHandle.seekToEndOfFile()
+                if let logData = errorStr.data(using: .utf8) {
+                    fileHandle.write(logData)
+                }
+                fileHandle.closeFile()
+            } else {
+                // Create file if it doesn't exist
+                try? errorStr.write(toFile: debugPath, atomically: false, encoding: .utf8)
+            }
         }
     }
 

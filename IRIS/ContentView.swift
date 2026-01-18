@@ -58,6 +58,7 @@ struct OverlayView: View {
         ZStack {
             // Transparent background - never captures clicks
             Color.clear
+                .contentShape(Rectangle())
                 .allowsHitTesting(false)
 
             // Hide indicator when Gemini overlay is active
@@ -111,6 +112,7 @@ struct OverlayView: View {
                     .allowsHitTesting(false)
             }
 
+            // Gemini overlay handles its own hit testing (active when showing chat)
             GeminiResponseOverlayModern(geminiService: coordinator.geminiAssistant)
 
             if showDebugOverlays {

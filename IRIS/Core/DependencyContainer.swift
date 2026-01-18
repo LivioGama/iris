@@ -129,7 +129,8 @@ class DependencyContainer {
             conversationManager: conversationManager,
             voiceInteractionService: voiceInteractionService,
             messageExtractionService: messageExtractionService,
-            screenshotService: screenshotService
+            screenshotService: screenshotService,
+            gazeEstimator: gazeEstimator
         )
     }()
 

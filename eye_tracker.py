@@ -54,16 +54,15 @@ def main():
     ema_x, ema_y = screen_width / 2, screen_height / 2
     ema_nose_x, ema_nose_y = 0.5, 0.5
 
-    # Blink detection thresholds
-    EYE_AR_THRESH = 0.30  # Higher threshold - easier to trigger
+    # Blink detection thresholds - balanced to work but prevent false triggers
+    EYE_AR_THRESH = 0.25  # Threshold for closed eye
     EYE_AR_CONSEC_FRAMES = 2
     blink_counter = 0
     is_blinking = False
 
     # Long blink detection for screenshot trigger
-    # Normal blink: ~3-5 frames (0.1-0.17 seconds)
-    # Intentional long blink: 3 frames (0.1 seconds) - very responsive
-    LONG_BLINK_THRESH = 3
+    # Require sustained wink of 8 frames (0.27 seconds)
+    LONG_BLINK_THRESH = 8
 
     # Debug: print eye aspect ratio every 30 frames
     frame_debug_counter = 0
@@ -99,30 +98,50 @@ def main():
 
                 landmarks = results.multi_face_landmarks[0].landmark
 
-                # Blink detection using eye aspect ratio
+                # Wink detection using eye aspect ratio for BOTH eyes
+                # Left eye landmarks
                 left_eye_top = landmarks[159]
                 left_eye_bottom = landmarks[145]
                 left_eye_left = landmarks[33]
                 left_eye_right = landmarks[133]
 
-                vertical_dist = abs(left_eye_top.y - left_eye_bottom.y)
-                horizontal_dist = abs(left_eye_right.x - left_eye_left.x)
-                eye_aspect_ratio = vertical_dist / horizontal_dist if horizontal_dist > 0 else 1.0
+                left_vertical_dist = abs(left_eye_top.y - left_eye_bottom.y)
+                left_horizontal_dist = abs(left_eye_right.x - left_eye_left.x)
+                left_ear = left_vertical_dist / left_horizontal_dist if left_horizontal_dist > 0 else 1.0
+
+                # Right eye landmarks
+                right_eye_top = landmarks[386]
+                right_eye_bottom = landmarks[374]
+                right_eye_left = landmarks[362]
+                right_eye_right = landmarks[263]
+
+                right_vertical_dist = abs(right_eye_top.y - right_eye_bottom.y)
+                right_horizontal_dist = abs(right_eye_right.x - right_eye_left.x)
+                right_ear = right_vertical_dist / right_horizontal_dist if right_horizontal_dist > 0 else 1.0
 
                 # Debug: Print EAR periodically
                 frame_debug_counter += 1
-                if frame_debug_counter % 90 == 0:  # Every 3 seconds at 30fps
-                    print(f"👁️ EAR: {eye_aspect_ratio:.3f} (thresh: {EYE_AR_THRESH}, closed_count: {eyes_closed_counter})", file=sys.stderr, flush=True)
+                if frame_debug_counter % 30 == 0:  # Every 1 second at 30fps
+                    print(f"👁️ LEFT_EAR: {left_ear:.3f}, RIGHT_EAR: {right_ear:.3f} (thresh: {EYE_AR_THRESH}, closed_count: {eyes_closed_counter})", file=sys.stderr, flush=True)
 
-                if eye_aspect_ratio < EYE_AR_THRESH:
-                    blink_counter += 1
+                # Detect WINK: one eye closed, other eye open
+                # Left eye closed, right eye open = left wink
+                # Right eye closed, left eye open = right wink
+                left_closed = left_ear < EYE_AR_THRESH
+                right_closed = right_ear < EYE_AR_THRESH
+
+                # Only trigger if exactly ONE eye is closed (wink, not blink)
+                is_winking = (left_closed and not right_closed) or (right_closed and not left_closed)
+
+                if is_winking:
                     eyes_closed_counter += 1
+                    blink_counter += 1
 
-                    # Check for intentional long blink trigger
-                    # Trigger at 6 frames (~0.2s) - slightly longer than normal blink
-                    if eyes_closed_counter >= LONG_BLINK_THRESH and not long_blink_triggered:
+                    # Trigger on sustained wink (3 consecutive frames)
+                    if eyes_closed_counter == LONG_BLINK_THRESH and not long_blink_triggered:
                         long_blink_triggered = True
-                        print(f"🔔 BLINK TRIGGERED! eyes_closed_counter={eyes_closed_counter}", file=sys.stderr, flush=True)
+                        which_eye = "LEFT" if left_closed else "RIGHT"
+                        print(f"😉 {which_eye} WINK TRIGGERED! (L:{left_ear:.3f} R:{right_ear:.3f})", file=sys.stderr, flush=True)
                         # Send blink event for screenshot using binary protocol
                         send_binary_blink(ema_x, ema_y)
                 else:

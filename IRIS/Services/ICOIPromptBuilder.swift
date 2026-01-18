@@ -27,13 +27,26 @@ public class ICOIPromptBuilder {
 
     /// Generates prompt for instant message reply generation
     private func buildMessageReplyPrompt(userRequest: String, focusedElement: DetectedElement?) -> String {
-        let contextInfo = focusedElement.map { "FOCUSED ELEMENT: \"\($0.label)\" (type: \($0.type))" } ?? "FOCUSED ELEMENT: none detected"
+        var contextInfo = ""
+        if let element = focusedElement {
+            let width = element.bounds.width
+            let height = element.bounds.height
+            contextInfo = """
+
+            🎯 FOCUSED REGION (HIGHLIGHTED IN BLUE):
+            The screenshot contains a BLUE BOUNDING BOX marking the area the user is focused on.
+            - Label: "\(element.label)"
+            - Type: \(element.type)
+            - Bounding Box: x=\(Int(element.bounds.minX)), y=\(Int(element.bounds.minY)), width=\(Int(width)), height=\(Int(height))
+            - The BLUE BORDERED RECTANGLE marks the exact region the user is looking at
+            - Focus on content INSIDE this blue box while using surrounding context for better understanding
+            """
+        }
 
         return """
         🌍 CRITICAL: Respond in the EXACT same language as the user's request below.
 
-        User request: "\(userRequest)"
-        \(contextInfo)
+        User request: "\(userRequest)"\(contextInfo)
 
         IDENTITY RULES:
         - USER (you're helping) = RIGHT side messages (blue/green bubbles)
@@ -171,14 +184,20 @@ public class ICOIPromptBuilder {
         if let element = focusedElement {
             let centerX = element.bounds.midX
             let centerY = element.bounds.midY
+            let width = element.bounds.width
+            let height = element.bounds.height
 
             prompt += """
 
 
-            FOCUS AREA: "\(element.label)" (type: \(element.type))
-            Location: (\(Int(centerX)), \(Int(centerY)))
-
-            Analyze ONLY this area in the screenshot.
+            🎯 FOCUSED REGION (HIGHLIGHTED IN BLUE):
+            The screenshot contains a BLUE BOUNDING BOX marking the area the user is focused on.
+            - Label: "\(element.label)"
+            - Type: \(element.type)
+            - Bounding Box: x=\(Int(element.bounds.minX)), y=\(Int(element.bounds.minY)), width=\(Int(width)), height=\(Int(height))
+            - Center: (\(Int(centerX)), \(Int(centerY)))
+            - The BLUE BORDERED RECTANGLE marks the exact region the user is looking at
+            - Focus on content INSIDE this blue box while using surrounding context for better understanding
             """
         }
 
