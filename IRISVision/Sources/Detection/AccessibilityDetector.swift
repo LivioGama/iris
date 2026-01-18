@@ -515,6 +515,12 @@ public class AccessibilityDetector {
         case .sidebar: 0.75
         case .textRegion: 0.6
         case .window: 0.7
+        case .textField: 0.8
+        case .text: 0.6
+        case .image: 0.7
+        case .menu: 0.75
+        case .link: 0.75
+        case .unknown: 0.3
         case .other: 0.4
         }
 

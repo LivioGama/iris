@@ -63,6 +63,18 @@ struct DetectedElementView: View {
             return .gray
         case .window:
             return .purple
+        case .textField:
+            return .green
+        case .text:
+            return .gray
+        case .image:
+            return .cyan
+        case .menu:
+            return .orange
+        case .link:
+            return .blue
+        case .unknown:
+            return .gray
         case .other:
             return .yellow
         }

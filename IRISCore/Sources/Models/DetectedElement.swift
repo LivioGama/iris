@@ -24,5 +24,11 @@ public enum ElementType {
     case button
     case textRegion
     case window
+    case textField
+    case text
+    case image
+    case menu
+    case link
+    case unknown
     case other
 }
