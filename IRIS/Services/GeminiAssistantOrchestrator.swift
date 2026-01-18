@@ -367,9 +367,20 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         print(msg)
         try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
 
+        // CRITICAL: Stop all listening and timers FIRST
+        voiceInteractionService.stopListening()
+
+        // Stop countdown timer
+        DispatchQueue.main.async {
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
+            self.timeoutStartTime = nil
+            self.remainingTimeout = nil
+        }
+
         // Set cooldown to prevent immediate reopening
         self.lastBlinkTime = Date()
-        let msg2 = "🛑 Set cooldown to prevent immediate reopening"
+        let msg2 = "🛑 Stopped all listening/timers and set cooldown"
         print(msg2)
         try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
 
@@ -391,6 +402,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.parsedICOIResponse = nil
             self.isProcessing = false
             self.isListening = false
+            self.isListeningForBuffers = false
 
             // Clear extracted messages state
             self.extractedMessages.removeAll()

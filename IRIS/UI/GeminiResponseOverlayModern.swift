@@ -90,7 +90,6 @@ struct GeminiResponseOverlayModern: View {
         .floatingShadow(config: currentConfig, radius: 45)
         .glowingBorder(config: currentConfig, lineWidth: 1.5)
         .clipShape(currentConfig.shapeForMode())
-        .overlay(closeButton, alignment: .topTrailing)
         .padding(.horizontal, 40)
         .padding(.bottom, 40)
         .transition(IRISTransitions.morph)
@@ -144,17 +143,19 @@ struct GeminiResponseOverlayModern: View {
 
             Spacer()
 
-            // Close button
+            // Close button - ALWAYS works, forces close immediately
             Button(action: {
-                geminiService.chatMessages.removeAll()
+                geminiService.stopListening()
+                geminiService.resetConversationState()
             }) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(IRISColors.textSecondary)
-                    .font(.system(size: 16))
+                    .font(.system(size: 22))
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Close overlay")
+            .help("Close overlay (ESC)")
             .padding(.trailing, IRISSpacing.xs)
+            .allowsHitTesting(true) // ALWAYS clickable
         }
         .frame(height: 40)
     }
@@ -346,39 +347,15 @@ struct GeminiResponseOverlayModern: View {
         }
     }
 
-    // MARK: - Close Button
-
-    private var closeButton: some View {
-        Button(action: closeResponse) {
-            Image(systemName: "xmark.circle.fill")
-                .foregroundColor(IRISColors.textSecondary)
-                .font(.system(size: 22))
-                .padding(IRISSpacing.md)
-        }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-    }
-
-    // MARK: - Actions
-
-    private func closeResponse() {
-        geminiService.stopListening()
-        geminiService.resetConversationState()
-    }
-
     // MARK: - Key Monitors
 
     private func setupKeyMonitors() {
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 && !geminiService.chatMessages.isEmpty {
-                DispatchQueue.main.async { closeResponse() }
+                DispatchQueue.main.async {
+                    geminiService.stopListening()
+                    geminiService.resetConversationState()
+                }
                 return nil
             }
             return event
@@ -386,7 +363,10 @@ struct GeminiResponseOverlayModern: View {
 
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 && !geminiService.chatMessages.isEmpty {
-                DispatchQueue.main.async { closeResponse() }
+                DispatchQueue.main.async {
+                    geminiService.stopListening()
+                    geminiService.resetConversationState()
+                }
             }
         }
     }
