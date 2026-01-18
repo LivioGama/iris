@@ -2,7 +2,7 @@
 //  EtherealFloatingOverlay.swift
 //  IRIS
 //
-//  Truly ethereal overlay - no physical boundaries, pure abstract AI presence
+//  Ethereal floating overlay - screenshot slides up, AI presence flows below
 //
 
 import SwiftUI
@@ -10,184 +10,769 @@ import IRISCore
 import IRISNetwork
 import AppKit
 
-/// Pure ethereal overlay - individual floating elements, no containers, no connections
+/// Ethereal floating overlay - screenshot slides up, gradient AI presence, floating dream text
 struct EtherealFloatingOverlay: View {
     @ObservedObject var geminiService: GeminiAssistantOrchestrator
+    @State private var screenshotOffset: CGFloat = 0
+    @State private var showGradient: Bool = false
 
     var body: some View {
-        // NOTHING exists when no screenshot - completely ethereal
-        if geminiService.capturedScreenshot != nil {
-            etherealElements
+        GeometryReader { geometry in
+            ZStack {
+                // Fully transparent background - always click-through
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+
+                // Show ethereal elements when overlay is active
+                if isOverlayActive {
+                    etherealContent(geometry: geometry)
+                        .onAppear {
+                            // Animate screenshot sliding up (less offset to stay in view)
+                            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                                screenshotOffset = -50
+                            }
+                            // Show gradient after screenshot starts moving
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                withAnimation(.easeIn(duration: 0.6)) {
+                                    showGradient = true
+                                }
+                            }
+                        }
+                        .onDisappear {
+                            screenshotOffset = 0
+                            showGradient = false
+                        }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
+    // CRITICAL: Same condition as working overlay
+    private var isOverlayActive: Bool {
+        geminiService.isListening || geminiService.isProcessing ||
+        !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil
+    }
+
+    // MARK: - Ethereal Content
+
     @ViewBuilder
-    private var etherealElements: some View {
+    private func etherealContent(geometry: GeometryProxy) -> some View {
         ZStack {
-            // Individual floating elements positioned independently across the screen
-
-            // Top-left area: gentle nudge awareness
-            VStack {
-                HStack {
-                    Spacer().frame(width: 20)
-
-                    if geminiService.isListening || geminiService.isProcessing || !geminiService.chatMessages.isEmpty {
-                        // Tiny ethereal presence indicator
-                        etherealPresence
-                    }
-
-                    Spacer()
-                }
-                Spacer().frame(height: 20)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            // Center: when active, show the soul
-            if geminiService.isListening || geminiService.isProcessing {
-                VStack {
-                    Spacer().frame(height: NSScreen.main?.frame.height ?? 1600 * 0.2)
-
-                    // Floating audio soul - no container, just essence
-                    etherealSoul
-
-                    Spacer()
-                }
+            // Gradient AI presence - ALWAYS in the background
+            if showGradient {
+                gradientAIPresence
+                    .transition(.opacity)
+                    .allowsHitTesting(false)  // Never block clicks
+                    .zIndex(0)  // Force to background
             }
 
-            // Bottom-right: minimalist state whisper
-            VStack {
-                Spacer().frame(height: NSScreen.main?.frame.height ?? 1600 * 0.7)
+            // Content layer - ALWAYS in front
+            VStack(spacing: 12) {
+                // Top padding
+                Spacer()
+                    .frame(height: 80)
 
-                HStack {
-                    Spacer()
-
-                    // State indication - barely perceptible
-                    if geminiService.isListening {
-                        etherealState("Listening...")
-                    } else if geminiService.isProcessing {
-                        etherealState("Thinking...")
-                    }
-
-                    Spacer().frame(width: 40)
+                // Screenshot - smaller, with top padding (allows hit testing for close button)
+                if let screenshot = geminiService.capturedScreenshot {
+                    screenshotView(screenshot)
+                        .offset(y: screenshotOffset)
+                        .allowsHitTesting(true)  // Enable hit testing for screenshot and close button
                 }
 
-                Spacer().frame(height: 100)
+                // Floating transcription right below screenshot - compact, dream-like
+                floatingTranscription
+                    .padding(.horizontal, 40)
+                    .allowsHitTesting(false)  // Transcription remains click-through
+
+                Spacer()
             }
+            .zIndex(100)  // Force to foreground
         }
-        .allowsHitTesting(false) // Never interfere with underlying apps
     }
 
-    // MARK: - Ethereal Components
+    // MARK: - Components
 
-    // Pure presence - just a dot of consciousness
     @ViewBuilder
-    private var etherealPresence: some View {
-        Circle()
-            .fill(
+    private func screenshotView(_ screenshot: NSImage) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(nsImage: screenshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: 400, maxHeight: 200)
+                .cornerRadius(8)
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+
+            // Close button - top right, clickable
+            Button(action: {
+                geminiService.resetConversationState()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+            .offset(x: 8, y: -8)
+            .allowsHitTesting(true)  // Make button clickable
+        }
+    }
+
+    @ViewBuilder
+    private var gradientAIPresence: some View {
+        // Gradient presence - Gemini sparkle/star shape
+        // Using official Gemini colors: #4796E3 (blue), #9177C7 (purple), #CA6673 (red/pink)
+        VStack {
+            Spacer()
+                .frame(height: 180)
+
+            ZStack {
+                // Four-pointed star/sparkle shape like Gemini logo
+                ForEach(0..<4, id: \.self) { i in
+                    let angle = Double(i) * 90.0
+
+                    // Each ray of the sparkle
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "4796E3").opacity(0.3),  // Gemini blue
+                                    Color(hex: "9177C7").opacity(0.2),  // Gemini purple
+                                    Color(hex: "CA6673").opacity(0.08),  // Gemini red/pink
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 60, height: 180)
+                        .blur(radius: 30)
+                        .rotationEffect(.degrees(angle))
+                        .scaleEffect(showGradient ? 1.15 : 0.95)
+                        .opacity(showGradient ? 0.9 : 0.6)
+                }
+
+                // Smaller inner sparkle for depth (rotated 45 degrees)
+                ForEach(0..<4, id: \.self) { i in
+                    let angle = Double(i) * 90.0 + 45.0
+
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "9177C7").opacity(0.25),  // Gemini purple
+                                    Color(hex: "4796E3").opacity(0.12),  // Gemini blue
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 40, height: 120)
+                        .blur(radius: 25)
+                        .rotationEffect(.degrees(angle))
+                        .scaleEffect(showGradient ? 0.95 : 1.15)
+                        .opacity(showGradient ? 0.7 : 0.4)
+                }
+
+                // Center glow
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(hex: "4796E3").opacity(0.2),
+                                Color(hex: "9177C7").opacity(0.1),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 80
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+                    .blur(radius: 20)
+                    .scaleEffect(showGradient ? 1.2 : 1.0)
+            }
+            .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: showGradient)
+            .mask(
                 RadialGradient(
-                    colors: [Color.cyan.opacity(0.6), Color.cyan.opacity(0.1)],
+                    colors: [
+                        .black,
+                        .black,
+                        .black.opacity(0.8),
+                        .black.opacity(0.4),
+                        .clear
+                    ],
                     center: .center,
                     startRadius: 0,
-                    endRadius: 20
+                    endRadius: 280
                 )
             )
-            .frame(width: 8, height: 8)
-            .shadow(color: Color.cyan.opacity(0.2), radius: 10, x: 0, y: 0)
-            .scaleEffect(1.3)
-            .opacity(0.8)
-            .animation(.smooth(duration: 1.2).repeatForever(autoreverses: true), value: UUID())
+
+            Spacer()
+        }
     }
 
-    // The soul - pure abstraction of listening
-    @ViewBuilder
-    private var etherealSoul: some View {
-        VStack(spacing: 48) {
-            // Abstract audio visualization - pure energy
-            etherealAudioField
 
-            // Live transcription appears as ghost text
+
+    @ViewBuilder
+    private var floatingTranscription: some View {
+        VStack(spacing: 20) {
+            // ALWAYS show user input at the top (NEVER disappears)
             if !geminiService.liveTranscription.isEmpty {
-                etherealGhostText(geminiService.liveTranscription)
+                // Live transcription while speaking
+                Text(geminiService.liveTranscription)
+                    .font(.system(size: 28, weight: .ultraLight, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, Color(hex: "4796E3").opacity(0.9)],  // Gemini blue
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .tracking(1)
+                    .lineSpacing(8)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 700)
+                    .shadow(color: Color(hex: "4796E3").opacity(0.3), radius: 20)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .zIndex(100)
+            } else if let lastUserMessage = geminiService.chatMessages.last(where: { $0.role == .user }) {
+                // Show last user message (stays visible during processing and streaming)
+                Text(lastUserMessage.content)
+                    .font(.system(size: 24, weight: .ultraLight, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white.opacity(0.9), Color(hex: "4796E3").opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .tracking(0.8)
+                    .lineSpacing(6)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 700)
+                    .shadow(color: Color(hex: "4796E3").opacity(0.25), radius: 15)
+                    .zIndex(100)
+            } else if !geminiService.transcribedText.isEmpty {
+                // Fallback: show transcribed text if available
+                Text(geminiService.transcribedText)
+                    .font(.system(size: 24, weight: .ultraLight, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white.opacity(0.9), Color(hex: "4796E3").opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .tracking(0.8)
+                    .lineSpacing(6)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 700)
+                    .shadow(color: Color(hex: "4796E3").opacity(0.25), radius: 15)
+                    .zIndex(100)
+            }
+
+            // Layer waves and messages with ZStack
+            ZStack(alignment: .top) {
+                // Animated gradient waves BELOW messages (always in background)
+                if geminiService.isProcessing && geminiService.liveGeminiResponse.isEmpty {
+                    animatedGradientWaves
+                        .zIndex(0)  // Background
+                }
+
+                // Chat conversation - only assistant messages, max 3 visible (in front)
+                if !geminiService.chatMessages.isEmpty || !geminiService.liveGeminiResponse.isEmpty {
+                    assistantMessagesView
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .zIndex(10)  // Foreground
+                }
+            }
+
+            // Subtle listening hint
+            if geminiService.capturedScreenshot != nil && geminiService.liveTranscription.isEmpty && !geminiService.isProcessing && geminiService.chatMessages.isEmpty {
+                Text("speak now")
+                    .font(.system(size: 12, weight: .ultraLight, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.4))
+                    .tracking(4)
+                    .opacity(0.6)
+                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: UUID())
             }
         }
-        .padding(.horizontal, 60)
     }
 
-    // Audio field - abstract energy waves
+    // MARK: - Animated Gradient Waves
+
     @ViewBuilder
-    private var etherealAudioField: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<36) { _ in
-                etherealWaveBar
+    private var animatedGradientWaves: some View {
+        ZStack {
+            // Multiple overlapping gradient layers with 3D wave animations
+            ForEach(0..<5, id: \.self) { i in
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(hex: "4796E3").opacity(0.2),  // Gemini blue
+                                Color(hex: "9177C7").opacity(0.15),  // Gemini purple
+                                Color(hex: "CA6673").opacity(0.1),  // Gemini red/pink
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 200
+                        )
+                    )
+                    .frame(width: 400, height: 150)
+                    .blur(radius: 35 + CGFloat(i * 5))
+                    .scaleEffect(
+                        x: showGradient ? 1.3 + Double(i) * 0.1 : 0.9 - Double(i) * 0.05,
+                        y: showGradient ? 0.8 - Double(i) * 0.05 : 1.2 + Double(i) * 0.1
+                    )
+                    .offset(
+                        x: showGradient ? CGFloat(30 - i * 15) : CGFloat(-30 + i * 15),
+                        y: CGFloat(i * 20)
+                    )
+                    .rotationEffect(.degrees(showGradient ? Double(i * 3) : Double(-i * 3)))
+                    .opacity(showGradient ? 0.9 : 0.5)
+                    .animation(
+                        .easeInOut(duration: 3.5 + Double(i) * 0.4)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(i) * 0.25),
+                        value: showGradient
+                    )
             }
         }
-        .opacity(0.7)
-        .scaleEffect(0.9)
+        .frame(width: 600, height: 200)
+        .clipped(antialiased: true)  // Prevent clipping of blur
+        .drawingGroup()  // Better performance for complex animations
+        .transition(.opacity)
     }
 
-    // Individual wave bar - pure abstraction
-    @ViewBuilder
-    private var etherealWaveBar: some View {
-        let randomHeight = CGFloat.random(in: 12...96)
-        let delay = Double.random(in: 0...2.0)
+    // MARK: - Assistant Messages View (Max 3)
 
-        Rectangle()
+    @ViewBuilder
+    private var assistantMessagesView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Only show assistant messages, max 3
+                    let assistantMessages = geminiService.chatMessages.filter { $0.role == .assistant }
+                    let recentMessages = Array(assistantMessages.suffix(3))
+
+                    ForEach(Array(recentMessages.enumerated()), id: \.element.id) { index, message in
+                        let isOldest = index == 0
+                        let isMiddle = index == 1
+
+                        // Fade and move up older messages
+                        let opacity = isOldest ? 0.3 : (isMiddle ? 0.6 : 1.0)
+                        let yOffset = isOldest ? -20.0 : (isMiddle ? -10.0 : 0.0)
+
+                        dreamChatBubble(message)
+                            .opacity(opacity)
+                            .offset(y: yOffset)
+                            .transition(.opacity.combined(with: .move(edge: .top).combined(with: .scale(scale: 0.95))))
+                            .animation(.easeOut(duration: 0.8), value: recentMessages.count)
+                            .id(message.id)
+                    }
+
+                    // Live streaming response
+                    if !geminiService.liveGeminiResponse.isEmpty {
+                        VStack(spacing: 12) {
+                            Text(geminiService.liveGeminiResponse)
+                                .font(.system(size: 20, weight: .light, design: .rounded))
+                                .foregroundColor(.white)  // Solid white for readability
+                                .tracking(0.4)
+                                .lineSpacing(8)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color(hex: "9177C7").opacity(0.2))  // More visible background
+                                        .blur(radius: 8)
+                                )
+                                .shadow(color: Color(hex: "9177C7").opacity(0.4), radius: 15)
+
+                            // Streaming indicator
+                            HStack(spacing: 4) {
+                                ForEach(0..<3, id: \.self) { i in
+                                    Circle()
+                                        .fill(Color(hex: "9177C7").opacity(0.6))  // Gemini purple
+                                        .frame(width: 4, height: 4)
+                                        .scaleEffect(1.2)
+                                        .animation(
+                                            .easeInOut(duration: 0.6)
+                                                .repeatForever(autoreverses: true)
+                                                .delay(Double(i) * 0.2),
+                                            value: UUID()
+                                        )
+                                }
+                            }
+                        }
+                        .frame(maxWidth: 700)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .id("streaming")
+                    }
+                }
+                .padding(.horizontal, 40)
+                .padding(.top, 20)
+                .padding(.bottom, 40)
+            }
+            .frame(maxHeight: 400)
+            .onChange(of: geminiService.chatMessages.count) { _ in
+                // Smooth scroll to latest message
+                if let lastMessage = geminiService.chatMessages.last {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: geminiService.liveGeminiResponse) { _ in
+                // Follow streaming response
+                if !geminiService.liveGeminiResponse.isEmpty {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo("streaming", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Chat Conversation View (OLD - UNUSED)
+
+    @ViewBuilder
+    private var chatConversationView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Previous chat messages with fade effect
+                    ForEach(Array(geminiService.chatMessages.enumerated()), id: \.element.id) { index, message in
+                        let isRecent = index >= geminiService.chatMessages.count - 3
+                        let opacity = isRecent ? 1.0 : max(0.3, 1.0 - Double(geminiService.chatMessages.count - index) * 0.15)
+
+                        dreamChatBubble(message)
+                            .opacity(opacity)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .id(message.id)
+                    }
+
+                    // Live streaming response - centered
+                    if !geminiService.liveGeminiResponse.isEmpty {
+                        VStack(spacing: 12) {
+                            Text(geminiService.liveGeminiResponse)
+                                .font(.system(size: 20, weight: .light, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.white, Color(hex: "9177C7")],  // Gemini purple
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .tracking(0.4)
+                                .lineSpacing(8)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color(hex: "9177C7").opacity(0.1))  // Gemini purple
+                                        .blur(radius: 8)
+                                )
+                                .shadow(color: Color(hex: "9177C7").opacity(0.25), radius: 15)
+
+                            // Streaming indicator
+                            HStack(spacing: 4) {
+                                ForEach(0..<3, id: \.self) { i in
+                                    Circle()
+                                        .fill(Color(hex: "9177C7").opacity(0.6))  // Gemini purple
+                                        .frame(width: 4, height: 4)
+                                        .scaleEffect(1.2)
+                                        .animation(
+                                            .easeInOut(duration: 0.6)
+                                                .repeatForever(autoreverses: true)
+                                                .delay(Double(i) * 0.2),
+                                            value: UUID()
+                                        )
+                                }
+                            }
+                        }
+                        .frame(maxWidth: 700)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .id("streaming")
+                    }
+                }
+                .padding(.horizontal, 40)
+                .padding(.top, 20)
+                .padding(.bottom, 40)
+            }
+            .frame(maxHeight: 500)
+            .mask(
+                // Fade gradient at top to fade messages below screenshot
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        .black.opacity(0.3),
+                        .black,
+                        .black
+                    ],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.15)
+                )
+            )
+            .onChange(of: geminiService.chatMessages.count) { _ in
+                // Smooth scroll to latest message
+                if let lastMessage = geminiService.chatMessages.last {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: geminiService.liveGeminiResponse) { _ in
+                // Follow streaming response
+                if !geminiService.liveGeminiResponse.isEmpty {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo("streaming", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dreamChatBubble(_ message: ChatMessage) -> some View {
+        // Center all messages
+        VStack(spacing: 4) {
+            Text(message.content)
+                .font(.system(size: 20, weight: .light, design: .rounded))
+                .foregroundColor(.white)  // Solid white for readability
+                .tracking(0.4)
+                .lineSpacing(8)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            message.role == .user ?
+                                Color(hex: "4796E3").opacity(0.2) :  // Gemini blue - more visible
+                                Color(hex: "9177C7").opacity(0.2)    // Gemini purple - more visible
+                        )
+                        .blur(radius: 8)
+                )
+                .shadow(
+                    color: (message.role == .user ? Color(hex: "4796E3") : Color(hex: "9177C7")).opacity(0.4),
+                    radius: 15
+                )
+        }
+        .frame(maxWidth: 700)
+    }
+
+    @ViewBuilder
+    private var presenceIndicator_OLD: some View {
+        HStack(spacing: 16) {
+            // Pulsing consciousness dot
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.cyan.opacity(0.9), Color.cyan.opacity(0.2)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 12
+                    )
+                )
+                .frame(width: 12, height: 12)
+                .shadow(color: Color.cyan.opacity(0.5), radius: 8)
+                .scaleEffect(geminiService.isListening || geminiService.isProcessing ? 1.3 : 1.0)
+                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: UUID())
+
+            // Minimal status text
+            if geminiService.isListening {
+                Text("listening")
+                    .font(.system(size: 11, weight: .ultraLight, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.7))
+                    .tracking(2)
+            } else if geminiService.isProcessing {
+                Text("thinking")
+                    .font(.system(size: 11, weight: .ultraLight, design: .monospaced))
+                    .foregroundColor(.purple.opacity(0.7))
+                    .tracking(2)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.3))
+        .cornerRadius(20)
+    }
+
+    @ViewBuilder
+    private var mainVisualization: some View {
+        VStack(spacing: 24) {
+            // Show screenshot captured indicator
+            if geminiService.capturedScreenshot != nil && !geminiService.isListening && !geminiService.isProcessing {
+                VStack(spacing: 16) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.cyan.opacity(0.6))
+
+                    Text("Screenshot captured")
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundColor(.white.opacity(0.8))
+
+                    Text("Speak now to analyze")
+                        .font(.system(size: 14, weight: .ultraLight))
+                        .foregroundColor(.white.opacity(0.6))
+                        .tracking(2)
+                }
+                .padding(40)
+                .transition(.opacity.combined(with: .scale))
+            }
+
+            // Audio visualization when listening
+            if geminiService.isListening {
+                audioWaves
+                    .transition(.opacity.combined(with: .scale))
+
+                // Live transcription
+                if !geminiService.liveTranscription.isEmpty {
+                    Text(geminiService.liveTranscription)
+                        .font(.system(size: 22, weight: .thin, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .tracking(0.5)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 700)
+                        .padding(.horizontal, 32)
+                        .transition(.opacity)
+                }
+            }
+
+            // Processing indicator
+            if geminiService.isProcessing {
+                thinkingDots
+                    .transition(.opacity.combined(with: .scale))
+
+                // Live response
+                if !geminiService.liveGeminiResponse.isEmpty {
+                    Text(geminiService.liveGeminiResponse)
+                        .font(.system(size: 20, weight: .thin, design: .rounded))
+                        .foregroundColor(.purple.opacity(0.9))
+                        .tracking(0.5)
+                        .lineSpacing(6)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 700)
+                        .padding(.horizontal, 32)
+                        .transition(.opacity)
+                }
+            }
+
+            // Chat messages
+            if !geminiService.chatMessages.isEmpty {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(geminiService.chatMessages) { message in
+                            chatBubble(message)
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                }
+                .frame(maxWidth: 800, maxHeight: 400)
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: geminiService.isListening)
+        .animation(.easeInOut(duration: 0.4), value: geminiService.isProcessing)
+    }
+
+    @ViewBuilder
+    private var audioWaves: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<24, id: \.self) { index in
+                waveBar(index: index)
+            }
+        }
+        .frame(height: 80)
+    }
+
+    @ViewBuilder
+    private func waveBar(index: Int) -> some View {
+        let height = CGFloat.random(in: 8...60)
+        let delay = Double(index) * 0.04
+
+        RoundedRectangle(cornerRadius: 2)
             .fill(
                 LinearGradient(
                     colors: [
                         Color.cyan.opacity(0.8),
-                        Color.blue.opacity(0.4),
-                        Color.cyan.opacity(0.1)
+                        Color.blue.opacity(0.5),
+                        Color.cyan.opacity(0.2)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .frame(width: 3, height: CGFloat.random(in: 8...randomHeight))
-            .opacity(Double.random(in: 0.3...0.9))
+            .frame(width: 3, height: height)
+            .opacity(0.7)
             .animation(
-                .easeInOut(duration: Double.random(in: 0.8...2.4))
+                .easeInOut(duration: Double.random(in: 1.0...2.0))
                     .repeatForever(autoreverses: true)
                     .delay(delay),
-                value: CGFloat.random(in: 8...96)
+                value: height
             )
     }
 
-    // Ghost text - barely visible whisper
     @ViewBuilder
-    private func etherealGhostText(_ text: String) -> some View {
-        VStack(spacing: 12) {
-            // Main text - ghostly presence
-            Text(text)
-                .foregroundColor(Color.white.opacity(0.85))
-                .font(.system(size: 20, weight: .thin, design: .rounded))
-                .tracking(0.8)
-                .lineSpacing(8)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 700, maxHeight: 120)
-                .shadow(color: .black.opacity(0.15), radius: 16, x: 0, y: 6)
-                .opacity(0.9)
-
-            // Ghostly subtitle
-            if text.count > 10 {
-                Text("I understand")
-                    .foregroundColor(Color.white.opacity(0.5))
-                    .font(.system(size: 11, weight: .ultraLight, design: .rounded))
-                    .tracking(2)
+    private var thinkingDots: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.purple.opacity(0.7))
+                    .frame(width: 8, height: 8)
+                    .scaleEffect(1.2)
+                    .animation(
+                        .easeInOut(duration: 0.6)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.2),
+                        value: UUID()
+                    )
             }
         }
-        .scaleEffect(0.95)
-        .animation(.smooth(duration: 0.6), value: text)
     }
 
-    // State indication - whisper from the void
     @ViewBuilder
-    private func etherealState(_ text: String) -> some View {
-        Text(text)
-            .foregroundColor(Color.white.opacity(0.4))
-            .font(.system(size: 10, weight: .ultraLight, design: .monospaced))
-            .tracking(3)
-            .opacity(0.6)
-            .animation(.easeIn(duration: 0.8).delay(Double.random(in: 0...1.5)), value: text)
+    private func chatBubble(_ message: ChatMessage) -> some View {
+        HStack {
+            if message.role == .user {
+                Spacer()
+            }
+
+            Text(message.content)
+                .font(.system(size: 16, weight: .light, design: .rounded))
+                .foregroundColor(.white.opacity(0.95))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(message.role == .user ? Color.cyan.opacity(0.2) : Color.purple.opacity(0.2))
+                )
+                .frame(maxWidth: 600, alignment: message.role == .user ? .trailing : .leading)
+
+            if message.role == .assistant {
+                Spacer()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stateIndicator: some View {
+        if geminiService.capturedScreenshot != nil && !geminiService.isListening && !geminiService.isProcessing {
+            Text("speak to continue")
+                .font(.system(size: 10, weight: .ultraLight, design: .monospaced))
+                .foregroundColor(.white.opacity(0.5))
+                .tracking(3)
+        }
     }
 }

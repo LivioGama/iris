@@ -430,6 +430,9 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func parseOutput(_ data: Data) {
+        let msg = "📥 parseOutput called with \(data.count) bytes"
+        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+
         var offset = 0
 
         while offset < data.count {

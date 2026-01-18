@@ -57,37 +57,7 @@ struct OverlayView: View {
 
     var body: some View {
         ZStack {
-            // ABSOLUTELY GUARANTEED VISIBLE INDICATOR - Bright red, very visible
-            VStack {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 20, height: 20)
-                            .shadow(color: .black.opacity(0.8), radius: 8, x: 0, y: 2)
-
-                        Text("IRIS ACTIVE")
-                            .foregroundColor(Color.white)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .shadow(color: .black.opacity(0.7), radius: 6, x: 0, y: 1)
-
-                        Text("Screenshot: \(coordinator.geminiAssistant.capturedScreenshot != nil ? "YES" : "NO")")
-                            .foregroundColor(Color.white.opacity(0.9))
-                            .font(.system(size: 11, weight: .medium))
-
-                        Text("Listening: \(coordinator.geminiAssistant.isListening ? "YES" : "NO")")
-                            .foregroundColor(Color.white.opacity(0.9))
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .padding(16)
-                    .background(Color.black.opacity(0.8))
-                    .cornerRadius(16)
-                    .padding(20)
-                    Spacer()
-                }
-                Spacer()
-            }
+            // Debug indicator removed per user request
 
             // Transparent background - never captures clicks
             Color.clear
@@ -145,9 +115,9 @@ struct OverlayView: View {
                     .allowsHitTesting(false)
             }
 
-            // Original ethereal overlay - natural floating elements
-            // Using existing GeminiResponseOverlayModern as base for reliability
-            GeminiResponseOverlayModern(geminiService: coordinator.geminiAssistant)
+            // New ethereal overlay based on working pattern
+            EtherealFloatingOverlay(geminiService: coordinator.geminiAssistant)
+                .allowsHitTesting(false) // NEVER block clicks
 
             if showDebugOverlays {
                 VStack {
@@ -162,6 +132,7 @@ struct OverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false) // ENTIRE overlay never blocks clicks
     }
 }
 

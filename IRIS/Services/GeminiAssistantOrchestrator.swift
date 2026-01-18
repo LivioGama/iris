@@ -25,11 +25,24 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var liveGeminiResponse = "" // Real-time streaming Gemini response
     @Published public var chatMessages: [ChatMessage] = []
     @Published public var isProcessing = false
-    @Published public var capturedScreenshot: NSImage? {
+    @Published public var isOverlayVisible = false {
         didSet {
-            let msg = "📸 capturedScreenshot changed: \(capturedScreenshot != nil ? "SET" : "CLEARED")"
+            let msg = "🎨 isOverlayVisible changed: \(isOverlayVisible)"
             print(msg)
             try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+        }
+    } // Independent overlay visibility flag
+    @Published public var capturedScreenshot: NSImage? {
+        didSet {
+            let msg = "📸 capturedScreenshot changed: \(capturedScreenshot != nil ? "SET" : "CLEARED")\n   Callstack: \(Thread.callStackSymbols.prefix(5).joined(separator: "\n   "))"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+
+            // When screenshot is set, ALWAYS show overlay
+            if capturedScreenshot != nil {
+                self.isOverlayVisible = true
+                print("✅ Screenshot set - overlay is now VISIBLE")
+            }
         }
     }
     @Published public var remainingTimeout: TimeInterval? = nil
@@ -67,6 +80,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility
+
+    // Inactivity timeout
+    private var inactivityTimer: Timer?
+    private var lastActivityTime: Date?
+    private let inactivityTimeout: TimeInterval = 10.0  // 10 seconds of no activity
 
     // Prompts
     private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
@@ -192,6 +210,13 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         self.capturedScreenshot = finalScreenshot
         self.currentFocusedElement = focusedElement
 
+        // Mark activity to start inactivity timer
+        markActivity()
+
+        let voiceMsg = "📸 Screenshot stored, about to start voice listening..."
+        print(voiceMsg)
+        try? voiceMsg.appendLine(to: "/tmp/iris_blink_debug.log")
+
         // Reset conversation for new interaction
         conversationManager.clearHistory()
 
@@ -238,8 +263,15 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             }
         }, onPartialResult: { [weak self] partialText in
             // Update live transcription in real-time
+            let msg = "📝 onPartialResult called with: '\(partialText)'"
+            print(msg)
+            try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
             DispatchQueue.main.async {
                 self?.liveTranscription = partialText
+                self?.markActivity()  // Mark activity when user is speaking
+                let msg2 = "📝 liveTranscription set to: '\(partialText)'"
+                print(msg2)
+                try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
             }
         }) { [weak self] prompt in
             print("================================================================================")
@@ -264,6 +296,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             if self.isStopCommand(prompt) {
                 print("🛑 Stop command detected, returning to indicator mode")
                 DispatchQueue.main.async {
+                    self.isOverlayVisible = false
                     self.capturedScreenshot = nil
                     self.isProcessing = false
                     self.isListening = false
@@ -274,13 +307,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             // Only process if there's actual input
             guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                print("⚠️ No voice input detected (empty prompt) - CLOSING OVERLAY")
-                DispatchQueue.main.async {
-                    self.capturedScreenshot = nil
-                    self.isProcessing = false
-                    self.isListening = false
-                    self.chatMessages.removeAll()
-                }
+                print("⚠️ No voice input detected (empty prompt) - KEEPING OVERLAY OPEN, waiting for speech")
+                // DON'T clear screenshot - keep overlay visible so user can speak
+                // The overlay will stay open until user speaks or explicitly closes it
                 return
             }
 
@@ -344,7 +373,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         print("🛑 Updated lastBlinkTime to prevent immediate re-opening")
 
         DispatchQueue.main.async {
-            print("🛑 stopListening: Clearing listening state and UI")
+            print("🛑 stopListening: Clearing listening state but KEEPING screenshot for overlay")
 
             // Stop countdown timer directly (no nested async)
             self.countdownTimer?.invalidate()
@@ -354,8 +383,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             self.isListening = false
             self.transcribedText = ""
-            self.capturedScreenshot = nil
-            self.chatMessages.removeAll()
+            // DON'T clear screenshot - keep overlay visible
+            // self.capturedScreenshot = nil  // ← Commented out to keep overlay visible
+            // DON'T clear chat messages - keep conversation visible
+            // self.chatMessages.removeAll()  // ← Commented out
 
             // Only clear isProcessing if we're not actually processing a Gemini request
             if !self.isProcessing {
@@ -376,13 +407,15 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         // CRITICAL: Stop all listening and timers FIRST
         voiceInteractionService.stopListening()
 
-        // Stop countdown timer
+        // Stop countdown timer and inactivity timer
         DispatchQueue.main.async {
             self.countdownTimer?.invalidate()
             self.countdownTimer = nil
             self.timeoutStartTime = nil
             self.remainingTimeout = nil
         }
+
+        stopInactivityTimer()
 
         // Set cooldown to prevent immediate reopening
         self.lastBlinkTime = Date()
@@ -399,6 +432,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             print(msg3)
             try? msg3.appendLine(to: "/tmp/iris_blink_debug.log")
 
+            self.isOverlayVisible = false
             self.chatMessages.removeAll()
             self.geminiResponse = ""
             self.liveGeminiResponse = ""
@@ -418,6 +452,61 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
 
         print("✅ Conversation state reset complete")
+    }
+
+    // MARK: - Inactivity Timeout Management
+
+    /// Marks activity to reset the inactivity timer
+    private func markActivity() {
+        lastActivityTime = Date()
+
+        // Only start/restart timer if overlay is active
+        if capturedScreenshot != nil || !chatMessages.isEmpty {
+            startInactivityTimer()
+        }
+    }
+
+    /// Starts the inactivity timer to auto-close overlay after 10 seconds
+    private func startInactivityTimer() {
+        // Cancel existing timer
+        inactivityTimer?.invalidate()
+
+        // Start new timer
+        inactivityTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  let lastActivity = self.lastActivityTime else {
+                return
+            }
+
+            let elapsed = Date().timeIntervalSince(lastActivity)
+
+            // Check if we're still inactive (not listening, not processing, no user action)
+            let isInactive = !self.isListening && !self.isProcessing
+
+            // If inactive for 10 seconds, close overlay
+            if isInactive && elapsed >= self.inactivityTimeout {
+                print("⏱️ Inactivity timeout reached (\(elapsed)s) - auto-closing overlay")
+                self.autoCloseOverlay()
+            }
+        }
+    }
+
+    /// Stops the inactivity timer
+    private func stopInactivityTimer() {
+        inactivityTimer?.invalidate()
+        inactivityTimer = nil
+        lastActivityTime = nil
+    }
+
+    /// Auto-closes the overlay with slide-up animation and reset
+    private func autoCloseOverlay() {
+        print("🎬 Auto-closing overlay with animation...")
+
+        // Stop the timer
+        stopInactivityTimer()
+
+        // Reset conversation state to close overlay
+        resetConversationState()
     }
 
     // MARK: - Private Methods
@@ -523,6 +612,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 // Update live Gemini response in real-time
                 Task { @MainActor in
                     self?.liveGeminiResponse = partialText
+                    self?.markActivity()  // Mark activity when Gemini is responding
                 }
             }
 
@@ -632,6 +722,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 // Update live Gemini response in real-time
                 Task { @MainActor in
                     self?.liveGeminiResponse = partialText
+                    self?.markActivity()  // Mark activity when Gemini is responding
                 }
             }
 
@@ -1035,6 +1126,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 if self.isStopCommand(followupPrompt) {
                     print("🛑 Stop command detected, returning to indicator mode")
                     DispatchQueue.main.async {
+                        self.isOverlayVisible = false
                         self.capturedScreenshot = nil
                         self.isProcessing = false
                         self.chatMessages.removeAll()
@@ -1081,24 +1173,21 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             // Stop timer when countdown reaches zero
             if remaining <= 0 {
-                print("⏱️ Timeout reached! Closing overlay and resetting state")
+                print("⏱️ Timeout reached! KEEPING OVERLAY OPEN, waiting for speech...")
                 self.countdownTimer?.invalidate()
                 self.countdownTimer = nil
                 self.remainingTimeout = nil
 
-                // Stop voice listening
+                // Stop current listening session
                 self.voiceInteractionService.stopListening()
 
-                // CRITICAL: Reset listening state so future blinks work
+                // Reset listening flags but KEEP the overlay open (screenshot stays)
                 self.isListening = false
                 self.isListeningForBuffers = false
                 self.isProcessing = false
 
-                // Close overlay and resume gaze indicator
-                self.chatMessages.removeAll()
-                self.capturedScreenshot = nil
-                self.liveTranscription = ""
-                self.transcribedText = ""
+                // Keep screenshot and overlay visible - user can still speak
+                // Only clear on explicit close or "stop" command
             }
         }
 
