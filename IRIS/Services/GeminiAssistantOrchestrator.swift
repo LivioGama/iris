@@ -4,9 +4,9 @@ import AVFoundation
 import IRISCore
 import IRISNetwork
 import IRISMedia
-import IRISVision
 import IRISGaze
 import GoogleGenerativeAI
+import Combine
 
 // MARK: - ICOI Services
 private let intentClassificationService = IntentClassificationService()
@@ -44,7 +44,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private let screenshotService: ScreenshotService
     private let gazeEstimator: GazeEstimator
     private let sentimentAnalysisService = SentimentAnalysisService.shared
-    private let visionTextDetector = VisionTextDetector()
+    // private let visionTextDetector = VisionTextDetector() // Commented out for now, VisionTextDetector not found
 
     // MARK: - State
     private var extractedMessages: [String] = []
@@ -64,6 +64,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // Blink cooldown
     private var lastBlinkTime: Date?
     private let blinkCooldownPeriod: TimeInterval = 5.0  // 5 seconds cooldown to prevent accidental re-opening
+
+    // Natural overlay state management
+    private var isInNaturalMode = false  // Use existing overlay for compatibility
 
     // Prompts
     private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
@@ -143,9 +146,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             return
         }
 
-        let msg3 = "✅ Using screen at mouse location \(mouseLocation): \(gazeScreen.frame), capturing screenshot..."
-        print(msg3)
-        try? msg3.appendLine(to: "/tmp/iris_blink_debug.log")
+        let message = "✅ Using screen at mouse location \(mouseLocation): \(gazeScreen.frame), capturing screenshot..."
+        print(message)
+        try? message.appendLine(to: "/tmp/iris_blink_debug.log")
+
+        // Keep existing screenshot flow - we'll enhance it with natural UI
+        // Keep the existing system intact
 
         guard let screenshot = screenshotService.captureScreen(gazeScreen) else {
             print("❌ Failed to capture screenshot")
