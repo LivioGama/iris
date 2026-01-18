@@ -774,6 +774,23 @@ struct EtherealFloatingOverlay: View {
     private func dreamChatBubble(_ message: ChatMessage) -> some View {
         // Center all messages
         VStack(spacing: 4) {
+            // Divider before assistant message
+            if message.role == .assistant {
+                Spacer().frame(height: 30)
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.5),
+                            Color(hex: "9177C7").opacity(0.5)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                    .frame(width: 400, height: 1)
+                    .shadow(color: Color(hex: "4796E3").opacity(0.6), radius: 4)
+                Spacer().frame(height: 30)
+            }
+
             Text(message.content)
                 .font(.system(size: 20, weight: .light, design: .rounded))
                 .foregroundColor(.white)  // Solid white for readability
@@ -795,6 +812,23 @@ struct EtherealFloatingOverlay: View {
                     color: (message.role == .user ? Color(hex: "4796E3") : Color(hex: "9177C7")).opacity(0.4),
                     radius: 15
                 )
+
+            // Divider after assistant message
+            if message.role == .assistant {
+                Spacer().frame(height: 30)
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [
+                            Color(hex: "9177C7").opacity(0.5),
+                            Color(hex: "4796E3").opacity(0.5)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                    .frame(width: 400, height: 1)
+                    .shadow(color: Color(hex: "9177C7").opacity(0.6), radius: 4)
+                Spacer().frame(height: 30)
+            }
         }
         .frame(maxWidth: 700)
     }
