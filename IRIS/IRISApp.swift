@@ -275,9 +275,15 @@ class PassThroughWindow: NSWindow {
     }
 
     private func updateMouseEventHandling() {
-        // ALWAYS pass through - never block clicks or window switching
-        // The overlay SwiftUI views will handle their own hit testing
-        self.ignoresMouseEvents = true
+        guard let coordinator = coordinator else { return }
+
+        // Only allow clicks when overlay is active (has screenshot or chat messages)
+        let overlayIsActive = coordinator.geminiAssistant.capturedScreenshot != nil ||
+                             !coordinator.geminiAssistant.chatMessages.isEmpty
+
+        // When overlay is active, allow clicks on the overlay content
+        // When overlay is inactive (just gaze indicator), pass through all clicks
+        self.ignoresMouseEvents = !overlayIsActive
     }
 
     deinit {
