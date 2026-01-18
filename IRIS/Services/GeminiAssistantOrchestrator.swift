@@ -48,6 +48,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var remainingTimeout: TimeInterval? = nil
     @Published public var parsedICOIResponse: ICOIParsedResponse?
     @Published public var currentIntent: ICOIIntent = .general // Current classified intent for UI layout
+    @Published public var shouldAutoClose: Bool = false // Trigger for slide-up animation
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -85,6 +86,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private var inactivityTimer: Timer?
     private var lastActivityTime: Date?
     private let inactivityTimeout: TimeInterval = 10.0  // 10 seconds of no activity
+
+    // Auto-close timer (after Gemini response)
+    private var autoCloseTimer: Timer?
+    private let autoCloseDelay: TimeInterval = 5.0  // 5 seconds after response completes
 
     // Prompts
     private let messageExtractionPrompt = "Looking at this chat screenshot, please list all the visible messages you can see in the conversation area (the blue message bubbles on the right side). Number each message (1., 2., 3., etc.). Ignore the contacts list on the left. ONLY list the messages, don't add any other text."
@@ -246,8 +251,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         voiceInteractionService.startListening(timeout: timeoutDuration, useExternalAudio: true, onSpeechDetected: { [weak self] in
             print("🗣️ Speech detected callback triggered!")
-            print("🎤 Speech detected! Stopping countdown...")
-            // Stop countdown when speech is detected
+            print("🎤 Speech detected! Stopping countdown and auto-close timer...")
+            // Stop countdown and auto-close timer when speech is detected
             DispatchQueue.main.async {
                 // Now mark as listening since speech was actually detected
                 self?.isListening = true
@@ -258,6 +263,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self?.countdownTimer?.invalidate()
                 self?.countdownTimer = nil
                 self?.remainingTimeout = nil
+
+                // Stop auto-close timer since user is speaking
+                self?.stopAutoCloseTimer()
 
                 // Don't add placeholder - we have live transcription
             }
@@ -333,9 +341,13 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self.currentIntent = intentClassification.intent
                 print("📌 Set currentIntent to: \(intentClassification.intent.rawValue)")
 
-                // Then replace the loading bubble with actual transcription
-                if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
-                    self.chatMessages[lastIndex] = ChatMessage(role: .user, content: prompt, timestamp: Date())
+                // Add user message to chat (only once, not duplicate)
+                // Check if this exact message already exists to prevent duplicates
+                if !self.chatMessages.contains(where: { $0.role == .user && $0.content == prompt }) {
+                    self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
+                    print("✅ Added user message to chat: '\(prompt.prefix(50))...'")
+                } else {
+                    print("⚠️ User message already exists, skipping duplicate")
                 }
 
                 // Send to Gemini (already on MainActor)
@@ -407,7 +419,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         // CRITICAL: Stop all listening and timers FIRST
         voiceInteractionService.stopListening()
 
-        // Stop countdown timer and inactivity timer
+        // Stop countdown timer, inactivity timer, and auto-close timer
         DispatchQueue.main.async {
             self.countdownTimer?.invalidate()
             self.countdownTimer = nil
@@ -416,6 +428,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
 
         stopInactivityTimer()
+        stopAutoCloseTimer()
 
         // Set cooldown to prevent immediate reopening
         self.lastBlinkTime = Date()
@@ -443,6 +456,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.isProcessing = false
             self.isListening = false
             self.isListeningForBuffers = false
+            self.shouldAutoClose = false
 
             // Clear extracted messages state
             self.extractedMessages.removeAll()
@@ -452,6 +466,48 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
 
         print("✅ Conversation state reset complete")
+    }
+
+    // MARK: - Auto-Close Management
+
+    /// Starts the auto-close timer (5 seconds after Gemini finishes responding)
+    private func startAutoCloseTimer() {
+        // Cancel existing timer
+        autoCloseTimer?.invalidate()
+
+        print("⏰ Starting auto-close timer (5 seconds)")
+
+        // Start new timer
+        autoCloseTimer = Timer.scheduledTimer(withTimeInterval: autoCloseDelay, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+
+            // Check if user has started speaking again or if we're processing
+            guard !self.isListening && !self.isProcessing else {
+                print("⏰ Auto-close cancelled - user is active")
+                return
+            }
+
+            print("⏰ Auto-close timer fired - triggering slide-up animation")
+            DispatchQueue.main.async {
+                self.shouldAutoClose = true
+            }
+        }
+    }
+
+    /// Stops the auto-close timer
+    private func stopAutoCloseTimer() {
+        autoCloseTimer?.invalidate()
+        autoCloseTimer = nil
+        print("⏰ Auto-close timer stopped")
+    }
+
+    /// Completes the auto-close process after animation finishes
+    public func completeAutoClose() {
+        print("✅ Auto-close animation complete - resetting conversation state")
+        // Reset the flag
+        shouldAutoClose = false
+        // Now reset everything
+        resetConversationState()
     }
 
     // MARK: - Inactivity Timeout Management
@@ -864,13 +920,15 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         User's voice request: "\(actualPrompt.isEmpty ? "What am I looking at?" : actualPrompt)"
 
         Response guidelines:
-        - Be brief and actionable (2-3 sentences unless asked for more)
+        - CRITICAL: BE EXTREMELY CONCISE - Maximum 1-2 short sentences. Get straight to the point.
+        - No explanations, no context, no extra details unless specifically asked
         - Use plain text only - NO markdown, NO asterisks, NO formatting symbols
         - ALWAYS respond from the USER's perspective (right side)
         - When analyzing messages, analyze what was sent TO the USER (from left side)
         - When suggesting replies, suggest what the USER should send (from right side)
         - Focus on the USER's personal situation and context
         - In chats: RIGHT = USER, LEFT = OTHER PERSON (this is absolute and never changes)
+        - Example: If asked "what should I reply?", give ONE concise suggestion, not multiple options or explanations
         """
 
         return fullPrompt
@@ -1066,6 +1124,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             print("✅ Gemini response received")
         }
 
+        // Start auto-close timer (5 seconds)
+        startAutoCloseTimer()
+
         startListeningForFollowup()
     }
 
@@ -1091,17 +1152,30 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             print("🎧 Ready for follow-up question...")
 
+            // Add 5-second timeout for follow-up questions
+            let followupTimeout: TimeInterval = 5.0
+
             DispatchQueue.main.async {
                 self.isListening = true
                 self.isListeningForBuffers = true
                 self.bufferCount = 0
                 print("🎤 Set isListeningForBuffers = true for follow-up")
-                // No timeout for follow-up questions
-                self.remainingTimeout = nil
+
+                // Set timeout countdown for follow-up
+                self.remainingTimeout = followupTimeout
+                self.timeoutStartTime = Date()
+                self.startCountdownTimer(totalTimeout: followupTimeout)
             }
 
-            self.voiceInteractionService.startListening(timeout: nil, useExternalAudio: true, onSpeechDetected: { [weak self] in
+            self.voiceInteractionService.startListening(timeout: followupTimeout, useExternalAudio: true, onSpeechDetected: { [weak self] in
                 DispatchQueue.main.async {
+                    // Stop countdown when speech is detected
+                    self?.countdownTimer?.invalidate()
+                    self?.countdownTimer = nil
+                    self?.remainingTimeout = nil
+
+                    // Stop auto-close timer since user is speaking
+                    self?.stopAutoCloseTimer()
                     // Don't add placeholder - we have live transcription
                 }
             }, onPartialResult: { [weak self] partialText in
@@ -1116,9 +1190,17 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                     self.isListening = false
                     self.liveTranscription = "" // Clear live transcription
 
-                    // Replace the loading bubble with actual transcription
-                    if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .user && $0.content == "..." }) {
-                        self.chatMessages[lastIndex] = ChatMessage(role: .user, content: followupPrompt, timestamp: Date())
+                    // Stop countdown timer
+                    self.countdownTimer?.invalidate()
+                    self.countdownTimer = nil
+                    self.remainingTimeout = nil
+
+                    // Add follow-up user message (check for duplicates)
+                    if !self.chatMessages.contains(where: { $0.role == .user && $0.content == followupPrompt }) {
+                        self.chatMessages.append(ChatMessage(role: .user, content: followupPrompt, timestamp: Date()))
+                        print("✅ Added follow-up user message: '\(followupPrompt.prefix(50))...'")
+                    } else {
+                        print("⚠️ Follow-up message already exists, skipping duplicate")
                     }
                 }
 
@@ -1135,8 +1217,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 }
 
                 if followupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    print("⚠️ No follow-up question detected, restarting follow-up loop")
-                    self.startListeningForFollowup()
+                    print("⚠️ No follow-up question detected after 5s timeout - auto-closing overlay")
+                    // Instead of restarting the loop, trigger auto-close
+                    DispatchQueue.main.async {
+                        self.shouldAutoClose = true
+                    }
                     return
                 }
 

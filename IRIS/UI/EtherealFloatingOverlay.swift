@@ -10,6 +10,46 @@ import IRISCore
 import IRISNetwork
 import AppKit
 
+// MARK: - Authentic Gemini Star Shape
+
+/// Custom shape that creates the authentic Gemini 4-pointed star
+/// Based on curved bezier paths between four points
+struct GeminiStarShape: Shape {
+    /// Determines how "sharp" the star is (0.65-0.7 for authentic Gemini look)
+    var sharpness: CGFloat = 0.68
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let top    = CGPoint(x: rect.midX, y: rect.minY)
+        let right  = CGPoint(x: rect.maxX, y: rect.midY)
+        let bottom = CGPoint(x: rect.midX, y: rect.maxY)
+        let left   = CGPoint(x: rect.minX, y: rect.midY)
+
+        // Control points for smooth curves
+        let controlTopRight    = interpolatedPoint(from: CGPoint(x: rect.maxX, y: rect.minY), to: center, t: sharpness)
+        let controlBottomRight = interpolatedPoint(from: CGPoint(x: rect.maxX, y: rect.maxY), to: center, t: sharpness)
+        let controlBottomLeft  = interpolatedPoint(from: CGPoint(x: rect.minX, y: rect.maxY), to: center, t: sharpness)
+        let controlTopLeft     = interpolatedPoint(from: CGPoint(x: rect.minX, y: rect.minY), to: center, t: sharpness)
+
+        path.move(to: top)
+        path.addQuadCurve(to: right, control: controlTopRight)
+        path.addQuadCurve(to: bottom, control: controlBottomRight)
+        path.addQuadCurve(to: left, control: controlBottomLeft)
+        path.addQuadCurve(to: top, control: controlTopLeft)
+        path.closeSubpath()
+
+        return path
+    }
+
+    private func interpolatedPoint(from start: CGPoint, to end: CGPoint, t: CGFloat) -> CGPoint {
+        let x = start.x + (end.x - start.x) * t
+        let y = start.y + (end.y - start.y) * t
+        return CGPoint(x: x, y: y)
+    }
+}
+
 /// Ethereal floating overlay - screenshot slides up, gradient AI presence, floating dream text
 struct EtherealFloatingOverlay: View {
     @ObservedObject var geminiService: GeminiAssistantOrchestrator
@@ -60,39 +100,225 @@ struct EtherealFloatingOverlay: View {
     @ViewBuilder
     private func etherealContent(geometry: GeometryProxy) -> some View {
         ZStack {
-            // Gradient AI presence - ALWAYS in the background
-            if showGradient {
-                gradientAIPresence
-                    .transition(.opacity)
-                    .allowsHitTesting(false)  // Never block clicks
-                    .zIndex(0)  // Force to background
-            }
+            // Background: Gemini star (positioned relative to screenshot)
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: 70)  // Higher up (was 100)
 
-            // Content layer - ALWAYS in front
-            VStack(spacing: 12) {
+                if showGradient {
+                    bigGeminiStar
+                        .scaleEffect(1.54)  // 154% (10% bigger than 140%)
+                        .opacity(0.35)  // Darker/less opacity (was 0.48)
+                        .transition(.opacity)
+                }
+
+                Spacer()
+            }
+            .allowsHitTesting(false)
+            .zIndex(0)
+
+            // Foreground: Screenshot and conversation
+            VStack(spacing: 0) {
                 // Top padding
                 Spacer()
-                    .frame(height: 80)
+                    .frame(height: 60)
 
-                // Screenshot - smaller, with top padding (allows hit testing for close button)
+                // Screenshot with close button
                 if let screenshot = geminiService.capturedScreenshot {
                     screenshotView(screenshot)
                         .offset(y: screenshotOffset)
-                        .allowsHitTesting(true)  // Enable hit testing for screenshot and close button
+                        .allowsHitTesting(true)
                 }
 
-                // Floating transcription right below screenshot - compact, dream-like
-                floatingTranscription
-                    .padding(.horizontal, 40)
-                    .allowsHitTesting(false)  // Transcription remains click-through
+                // Small spacing between screenshot and conversation
+                Spacer()
+                    .frame(height: 40)
+
+                // Conversation section ON TOP of the star - no horizontal constraints for overflow
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Show ALL finalized messages from chatMessages
+                        ForEach(geminiService.chatMessages) { message in
+                            if message.role == .user {
+                                userInputBubble(text: message.content, isLive: false)
+                            } else {
+                                geminiResponseBubble(text: message.content, isStreaming: false)
+                            }
+                        }
+
+                        // Live transcription ONLY if actively speaking (not yet in chatMessages)
+                        if !geminiService.liveTranscription.isEmpty {
+                            userInputBubble(text: geminiService.liveTranscription, isLive: true)
+                        }
+
+                        // Live streaming response ONLY if actively streaming (not yet finalized in chatMessages)
+                        if !geminiService.liveGeminiResponse.isEmpty {
+                            geminiResponseBubble(text: geminiService.liveGeminiResponse, isStreaming: true)
+                        }
+
+                        // Listening hint (only when no messages yet)
+                        if geminiService.capturedScreenshot != nil &&
+                           geminiService.liveTranscription.isEmpty &&
+                           !geminiService.isProcessing &&
+                           geminiService.chatMessages.isEmpty {
+                            Text("speak now")
+                                .font(.system(size: 12, weight: .ultraLight, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.5))
+                                .tracking(4)
+                        }
+                    }
+                    .padding(.horizontal, 60)  // More side padding to allow text overflow
+                }
+                .allowsHitTesting(false)
 
                 Spacer()
             }
-            .zIndex(100)  // Force to foreground
+            .zIndex(100)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Components
+
+    @ViewBuilder
+    private var bigGeminiStar: some View {
+        // Authentic Gemini 4-pointed sparkle using proper curved shape
+        ZStack {
+            // Outer glow layer - very large and soft
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.15),  // Gemini blue
+                            Color(hex: "9177C7").opacity(0.12),  // Gemini purple
+                            Color(hex: "CA6673").opacity(0.06),  // Gemini pink
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 800, height: 800)  // Huge outer glow
+                .blur(radius: 60)
+                .scaleEffect(geminiService.isProcessing ? 1.3 : 1.1)
+                .opacity(geminiService.isProcessing ? 0.7 : 0.4)
+                .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+
+            // Mid layer - defines the shape more
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.25),
+                            Color(hex: "9177C7").opacity(0.2),
+                            Color(hex: "CA6673").opacity(0.1),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 600, height: 600)
+                .blur(radius: 35)
+                .scaleEffect(geminiService.isProcessing ? 1.25 : 1.08)
+                .animation(.easeInOut(duration: 2.3).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+
+            // Sharp inner layer - crisp definition
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.35),
+                            Color(hex: "9177C7").opacity(0.28),
+                            Color(hex: "CA6673").opacity(0.15),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 450, height: 450)
+                .blur(radius: 18)
+                .scaleEffect(geminiService.isProcessing ? 1.2 : 1.05)
+                .animation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+
+            // Ultra-sharp core - maximum definition
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.45),
+                            Color(hex: "9177C7").opacity(0.35),
+                            Color(hex: "CA6673").opacity(0.2),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 350, height: 350)
+                .blur(radius: 8)
+                .scaleEffect(geminiService.isProcessing ? 1.15 : 1.02)
+                .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+
+            // Center bright core
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.5),
+                            Color(hex: "9177C7").opacity(0.4),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 180
+                    )
+                )
+                .frame(width: 280, height: 280)
+                .blur(radius: 5)
+                .scaleEffect(geminiService.isProcessing ? 1.1 : 1.0)
+                .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+        }
+    }
+
+    @ViewBuilder
+    private func userInputBubble(text: String, isLive: Bool) -> some View {
+        Text(text)
+            .font(.system(size: isLive ? 28 : 24, weight: .light, design: .rounded))  // Bolder (was ultraLight)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [.white, Color(hex: "4796E3").opacity(0.9)],  // Gemini blue
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .tracking(1)
+            .lineSpacing(8)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 600)  // Max width to fit within star
+            .shadow(color: .black.opacity(0.7), radius: 5, x: 0, y: 2)  // Bigger shadow
+            .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 3)
+            .shadow(color: Color(hex: "4796E3").opacity(0.4), radius: 25)
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+    }
+
+    @ViewBuilder
+    private func geminiResponseBubble(text: String, isStreaming: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 20, weight: .light, design: .rounded))  // Bolder (was ultraLight)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [.white, Color(hex: "9177C7").opacity(0.9)],  // Gemini purple
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .tracking(0.8)
+            .lineSpacing(10)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 600)  // Max width to fit within star
+            .shadow(color: .black.opacity(0.7), radius: 5, x: 0, y: 2)  // Bigger shadow
+            .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 3)
+            .shadow(color: Color(hex: "9177C7").opacity(0.4), radius: 25)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
 
     @ViewBuilder
     private func screenshotView(_ screenshot: NSImage) -> some View {

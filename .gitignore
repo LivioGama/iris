@@ -18,3 +18,15 @@ DerivedData/
 !default.perspectivev3
 .swiftpm/
 Package.resolved
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Editor
+*.swp
+*~
+.vscode/
+.idea/
