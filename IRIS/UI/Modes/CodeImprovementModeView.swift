@@ -168,7 +168,7 @@ struct CodeImprovementModeView: View {
             // Code content
             ScrollView([.vertical, .horizontal]) {
                 Text(code)
-                    .font(IRISTypography.codeStyle())
+                    .font(.system(size: 11, design: .monospaced))  // Smaller font for longer code
                     .foregroundColor(isAfter ? IRISColors.textPrimary : IRISColors.textSecondary)
                     .textSelection(.enabled)
                     .padding(IRISSpacing.sm)
@@ -178,7 +178,7 @@ struct CodeImprovementModeView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(hoveredPane == paneType ? 0.4 : 0.3))
+                .fill(Color.black.opacity(hoveredPane == paneType ? 0.95 : 0.90))  // Opaque background
         )
         .overlay(
             RoundedRectangle(cornerRadius: IRISRadius.normal)

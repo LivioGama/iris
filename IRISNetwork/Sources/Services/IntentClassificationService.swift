@@ -52,11 +52,22 @@ public class IntentClassificationService {
 
         Intents:
         - messageReply: User wants suggestions for replying to a message
-        - codeImprovement: User wants to improve, fix, refactor, or optimize code
+          Examples: "what should I reply", "help me respond", "suggest a reply"
+
+        - codeImprovement: User wants to improve, fix, refactor, optimize, or review code
+          Examples: "improve this code", "fix this", "refactor this", "optimize this", "make this better", "review this code", "what's wrong with this"
+
         - summarize: User wants a summary, key points, or overview of content
+          Examples: "summarize this", "what are the key points", "give me an overview"
+
         - toneFeedback: User wants to analyze or change the tone/style of text
+          Examples: "how does this sound", "rewrite this professionally", "make this more polite"
+
         - chartAnalysis: User wants to understand a graph, chart, or data visualization
-        - general: Anything else that doesn't fit the above
+          Examples: "explain this chart", "what does this graph show", "analyze this data"
+
+        - general: Anything else that doesn't fit the above (reading, explaining, questions)
+          Examples: "what is this", "explain this", "what does this mean"
 
         User request: "\(normalizedInput)"
 
@@ -73,9 +84,12 @@ public class IntentClassificationService {
 
             let cleanedResponse = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             print("📥 Gemini responded with: \"\(cleanedResponse)\"")
+            print("📥 Raw response (before cleaning): \"\(text)\"")
 
             // Parse the intent from Gemini's response
             let intent: ICOIIntent
+
+            // Try exact match first
             switch cleanedResponse {
             case "messagereply":
                 intent = .messageReply
@@ -87,8 +101,30 @@ public class IntentClassificationService {
                 intent = .toneFeedback
             case "chartanalysis":
                 intent = .chartAnalysis
-            default:
+            case "general":
                 intent = .general
+            default:
+                // Try substring matching as fallback
+                print("⚠️ No exact match for '\(cleanedResponse)', trying substring matching...")
+                if cleanedResponse.contains("code") || cleanedResponse.contains("improve") {
+                    intent = .codeImprovement
+                    print("✅ Matched 'codeImprovement' via substring")
+                } else if cleanedResponse.contains("message") || cleanedResponse.contains("reply") {
+                    intent = .messageReply
+                    print("✅ Matched 'messageReply' via substring")
+                } else if cleanedResponse.contains("summar") {
+                    intent = .summarize
+                    print("✅ Matched 'summarize' via substring")
+                } else if cleanedResponse.contains("tone") || cleanedResponse.contains("feedback") {
+                    intent = .toneFeedback
+                    print("✅ Matched 'toneFeedback' via substring")
+                } else if cleanedResponse.contains("chart") || cleanedResponse.contains("graph") {
+                    intent = .chartAnalysis
+                    print("✅ Matched 'chartAnalysis' via substring")
+                } else {
+                    intent = .general
+                    print("⚠️ No match found, defaulting to 'general'")
+                }
             }
 
             // High confidence since Gemini made the decision

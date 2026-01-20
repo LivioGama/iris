@@ -75,12 +75,18 @@ public class ICOIPromptBuilder {
 
         User request: "\(userRequest)"
 
-        TASK: Extract code, provide improved version, explain changes briefly.
+        TASK: Extract the code from the screenshot, provide an improved version, and explain the changes.
 
-        FORMAT:
+        FORMAT (YOU MUST FOLLOW THIS EXACTLY):
+
+        ## Original Code
+        ```[language]
+        [exact code from screenshot]
+        ```
+
         ## Improved Code
         ```[language]
-        [improved code]
+        [improved version of the code]
         ```
 
         ## Key Improvements
@@ -88,7 +94,11 @@ public class ICOIPromptBuilder {
         - [improvement 2]
         - [improvement 3]
 
-        Be concise. Focus on readability and best practices.
+        IMPORTANT:
+        - You MUST include BOTH "Original Code" and "Improved Code" sections
+        - The original code should be the EXACT code from the screenshot
+        - Be concise but thorough in explaining improvements
+        - Focus on readability, performance, and best practices
         """
     }
 

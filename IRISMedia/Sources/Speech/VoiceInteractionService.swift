@@ -109,6 +109,12 @@ public class VoiceInteractionService: NSObject {
 
                 if !self.speechDetectedCallbackCalled && !transcribedText.isEmpty {
                     self.speechDetectedCallbackCalled = true
+
+                    // Cancel timeout timer since speech was detected - we should now rely on silence detection
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutTimer = nil
+                    print("⏱️ Speech detected - cancelled timeout timer, relying on silence detection")
+
                     onSpeechDetected?()
                 }
                 self.startSilenceDetectionNoNode(completion: completion, transcribedTextGetter: { transcribedText })
@@ -219,6 +225,12 @@ public class VoiceInteractionService: NSObject {
                 // Call speech detected callback on first transcription
                 if !self.speechDetectedCallbackCalled && !transcribedText.isEmpty {
                     self.speechDetectedCallbackCalled = true
+
+                    // Cancel timeout timer since speech was detected - we should now rely on silence detection
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutTimer = nil
+                    print("⏱️ Speech detected - cancelled timeout timer, relying on silence detection")
+
                     onSpeechDetected?()
                 }
 

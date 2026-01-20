@@ -87,35 +87,57 @@ public class ICOIResponseParser {
         var language: String? = nil
         var improvements: [String] = []
 
-        // Extract the first code block as "improved code"
-        if let codeBlock = elements.first(where: { element in
-            if case .codeBlock = element { return true }
-            return false
-        }) {
-            if case .codeBlock(let lang, let code) = codeBlock {
-                newCode = code
-                language = lang
-            }
-        }
+        // Track which section we're in to assign code blocks correctly
+        var inOriginalSection = false
+        var inImprovedSection = false
+        var foundOriginalCode = false
 
-        // Extract improvements from bullet lists under "What's Better", "Key Improvements", "Improvements", etc.
-        var inImprovementsSection = false
         for element in elements {
             if case .heading(_, let text) = element {
                 let lowercased = text.lowercased()
-                inImprovementsSection = lowercased.contains("improvement") ||
-                                       lowercased.contains("better") ||
-                                       lowercased.contains("changes") ||
-                                       lowercased.contains("key")
-            } else if inImprovementsSection, case .bulletList(let items) = element {
-                improvements.append(contentsOf: items)
-                inImprovementsSection = false
+
+                // Detect "Original Code" section
+                if lowercased.contains("original") && lowercased.contains("code") {
+                    inOriginalSection = true
+                    inImprovedSection = false
+                }
+                // Detect "Improved Code" section
+                else if lowercased.contains("improved") && lowercased.contains("code") {
+                    inOriginalSection = false
+                    inImprovedSection = true
+                }
+                // Detect improvements section
+                else if lowercased.contains("improvement") ||
+                        lowercased.contains("better") ||
+                        lowercased.contains("changes") ||
+                        lowercased.contains("key") {
+                    inOriginalSection = false
+                    inImprovedSection = false
+                }
+            }
+            // Extract code blocks based on current section
+            else if case .codeBlock(let lang, let code) = element {
+                if inOriginalSection && !foundOriginalCode {
+                    oldCode = code
+                    language = lang
+                    foundOriginalCode = true
+                } else if inImprovedSection || (!foundOriginalCode) {
+                    // If we haven't found original code yet, treat first code block as improved
+                    // (for backward compatibility with responses that only provide improved code)
+                    newCode = code
+                    if language == nil {
+                        language = lang
+                    }
+                }
+            }
+            // Extract improvements from bullet lists
+            else if case .bulletList(let items) = element {
+                // Only add to improvements if we're not in a code section
+                if !inOriginalSection && !inImprovedSection {
+                    improvements.append(contentsOf: items)
+                }
             }
         }
-
-        // Try to extract old code from the screenshot or context
-        // For now, we'll leave oldCode as nil and rely on the screenshot to show the original
-        // The UI will hide the screenshot when oldCode is provided in the future
 
         return (oldCode: oldCode, newCode: newCode, language: language, improvements: improvements)
     }

@@ -1124,8 +1124,14 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             print("✅ Gemini response received")
         }
 
-        // Start auto-close timer (5 seconds)
-        startAutoCloseTimer()
+        // Start auto-close timer (5 seconds) - but NOT for code improvement
+        // Code improvement needs time to review side-by-side comparison
+        if intentClassification.intent != .codeImprovement {
+            startAutoCloseTimer()
+            print("⏰ Auto-close timer started for intent: \(intentClassification.intent.rawValue)")
+        } else {
+            print("⏰ Auto-close timer skipped for code improvement (user needs time to review)")
+        }
 
         startListeningForFollowup()
     }
