@@ -163,7 +163,12 @@ struct EtherealFloatingOverlay: View {
                                 Spacer()
                                     .frame(height: 30)
 
-                                geminiResponseBubble(text: message.content, isStreaming: false)
+                                if isCodeImprovementResponse(at: index),
+                                   let parsedResponse = geminiService.parsedICOIResponse {
+                                    codeImprovementBubble(parsedResponse)
+                                } else {
+                                    geminiResponseBubble(text: message.content, isStreaming: false)
+                                }
 
                                 // Divider AFTER Gemini response
                                 Spacer()
@@ -360,6 +365,37 @@ struct EtherealFloatingOverlay: View {
             .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 3)
             .shadow(color: Color(hex: "9177C7").opacity(0.4), radius: 25)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    private func isCodeImprovementResponse(at index: Int) -> Bool {
+        guard geminiService.currentIntent == .codeImprovement,
+              let parsedResponse = geminiService.parsedICOIResponse,
+              parsedResponse.hasCodeComparison else {
+            return false
+        }
+
+        let lastAssistantIndex = geminiService.chatMessages.lastIndex { $0.role == .assistant }
+        return lastAssistantIndex == index
+    }
+
+    @ViewBuilder
+    private func codeImprovementBubble(_ parsedResponse: ICOIParsedResponse) -> some View {
+        CodeComparisonView(
+            oldCode: parsedResponse.oldCode ?? "",
+            newCode: parsedResponse.newCode ?? "",
+            language: parsedResponse.codeLanguage ?? "Code",
+            improvements: parsedResponse.improvements,
+            onCopyNew: { copyToClipboard(parsedResponse.newCode ?? "") }
+        )
+        .frame(maxWidth: 900)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @ViewBuilder

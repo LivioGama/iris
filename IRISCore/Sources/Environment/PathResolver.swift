@@ -54,8 +54,11 @@ public enum PathResolver {
                 // Try common project locations
                 let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
                 let possiblePaths = [
+                    "\(homeDir)/Documents/iris",
                     "\(homeDir)/Documents/iris2",
+                    "\(homeDir)/iris",
                     "\(homeDir)/iris2",
+                    "/Users/livio/Documents/iris",
                     "/Users/livio/Documents/iris2"
                 ]
 
@@ -115,11 +118,16 @@ public enum PathResolver {
         case .bundled:
             // Production mode: try to use development venv if available
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let devVenvPath = "\(homeDir)/Documents/iris2/gaze_env/bin/python3"
+            let devVenvPaths = [
+                "\(homeDir)/Documents/iris/gaze_env/bin/python3",
+                "\(homeDir)/Documents/iris2/gaze_env/bin/python3"
+            ]
 
-            if FileManager.default.fileExists(atPath: devVenvPath) {
-                print("✅ PathResolver: Using development venv Python")
-                return devVenvPath
+            for devVenvPath in devVenvPaths {
+                if FileManager.default.fileExists(atPath: devVenvPath) {
+                    print("✅ PathResolver: Using development venv Python at \(devVenvPath)")
+                    return devVenvPath
+                }
             }
 
             // Try bundled Python if available
