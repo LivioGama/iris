@@ -50,7 +50,7 @@ public class GazeEstimator: ObservableObject {
     private let targetYBits = ManagedAtomic<UInt64>(540.0.bitPattern)
     private var displayPoint: CGPoint = CGPoint(x: 960, y: 540)
 
-    private let springStiffness: CGFloat = 0.35 // Matched to original for smoothness
+    private let springStiffness: CGFloat = 0.55 // Increased from 0.35 for lower latency
     private let calibrationResolution = CGSize(width: 3840, height: 1600)
 
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")

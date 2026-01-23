@@ -32,20 +32,19 @@ struct KalmanFilter {
         ]
 
         // Process noise (how much we trust the model)
-        // Lower values = smoother but more lag
-        // Higher values = more responsive but less smooth
+        // Velocity noise increased from 0.5 to 1.0 for faster response to velocity changes
         Q = [
             [0.1, 0, 0, 0],
             [0, 0.1, 0, 0],
-            [0, 0, 0.5, 0],    // Higher velocity noise
-            [0, 0, 0, 0.5]
+            [0, 0, 1.0, 0],    // Increased for lower latency
+            [0, 0, 0, 1.0]
         ]
 
         // Measurement noise (how much we trust the measurements)
-        // Eye tracker has some jitter
+        // Reduced from 5.0 to trust raw data more for lower latency
         R = [
-            [5.0, 0],
-            [0, 5.0]
+            [2.0, 0],
+            [0, 2.0]
         ]
     }
 

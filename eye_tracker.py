@@ -164,9 +164,9 @@ def main():
                 if is_blinking or eyes_closed_counter > 0:
                     continue
 
-                # Very heavy smoothing for stable hovering
-                ema_nose_x += (nose_x - ema_nose_x) * 0.10
-                ema_nose_y += (nose_y - ema_nose_y) * 0.10
+                # Responsive smoothing (reduced from 0.10 for lower latency)
+                ema_nose_x += (nose_x - ema_nose_x) * 0.25
+                ema_nose_y += (nose_y - ema_nose_y) * 0.25
 
                 h_norm = (ema_nose_x - nose_x_min) / (nose_x_max - nose_x_min)
                 v_norm = (ema_nose_y - nose_y_min) / (nose_y_max - nose_y_min)
@@ -188,10 +188,10 @@ def main():
                 dy = target_y - ema_y
                 dist = (dx*dx + dy*dy) ** 0.5
 
-                # Much slower cursor movement for stability
+                # Faster cursor movement (increased from 0.15 for lower latency)
                 if dist > 8:
-                    ema_x += dx * 0.15
-                    ema_y += dy * 0.15
+                    ema_x += dx * 0.35
+                    ema_y += dy * 0.35
                 else:
                     ema_x = target_x
                     ema_y = target_y
