@@ -72,7 +72,7 @@ Signing Command:   codesign --force --deep --sign - --identifier "com.iris.app" 
 ## When User Says "Rebuild" or "Rerun"
 
 ```bash
-cd /Users/livio/Documents/iris2 && ./build_and_install.sh
+cd /Users/livio/Documents/iris && ./build_and_install.sh
 ```
 
 **That's it. Nothing else.**
@@ -89,7 +89,7 @@ $HOME/Applications/IRIS.app/               # Install location (NEVER change)
         └── scripts/
             └── eye_tracker.py             # Python script (subdirectory)
 
-~/Documents/iris2/                         # Project root
+~/Documents/iris/                         # Project root
 ├── build_and_install.sh                   # THE ONLY BUILD SCRIPT TO USE
 ├── gaze_env/bin/python3                   # Virtual environment
 └── /tmp/iris_startup.log                  # Runtime logs
@@ -149,3 +149,6 @@ If user complains about permissions:
 4. **Permissions stay intact** ✅
 
 **That's it. Simple. Safe. Never deviate.**
+
+## Git
+cp means "Commit and push"

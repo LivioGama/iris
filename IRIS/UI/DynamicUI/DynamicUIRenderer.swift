@@ -59,15 +59,10 @@ struct DynamicUIRenderer: View {
 
     private var backgroundColor: some View {
         ZStack {
-            // Base dark layer
-            Color.black.opacity(0.5)
+            // Transparent base - let content behind show through
+            Color.clear
 
-            // Frosted glass material
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.7)
-
-            // Theme-specific gradient tint
+            // Very subtle theme tint only
             backgroundGradient
         }
     }

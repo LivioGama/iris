@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = DependencyContainer.shared.makeCoordinator()
     var overlayWindows: [NSWindow] = []
     var demoControlWindow: NSWindow?
+    var showcaseWindow: NSWindow?
     private var screenTimer: Timer?
     private var mouseMonitor: Any?
     private var currentMouseScreen: NSScreen?
@@ -51,6 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             setupOverlayWindows()
             setupDemoControlWindow()
+            setupShowcaseWindow()
             setupMouseTracking()
             await coordinator.start()
             print("Auto-started tracking")
@@ -275,6 +277,60 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         demoControlWindow = window
         print("🎮 Demo control window created")
+
+        // Auto-show first template if flag is enabled
+        if coordinator.geminiAssistant.autoShowDemoOnLaunch {
+            let demoSchemas = DynamicUIDemoGenerator.allDemoSchemas()
+            if let firstSchema = demoSchemas.first {
+                coordinator.geminiAssistant.dynamicUISchema = firstSchema
+                coordinator.geminiAssistant.isOverlayVisible = true
+                print("🎨 Auto-displaying first demo template: \(firstSchema.theme.title ?? "Unknown")")
+            }
+        }
+    }
+
+    private func setupShowcaseWindow() {
+        // Only create if showcase mode is enabled
+        guard coordinator.geminiAssistant.showAllTemplatesShowcase else { return }
+
+        guard let mainScreen = NSScreen.main else { return }
+
+        // Create a full-screen window to show all templates
+        let horizontalPadding: CGFloat = 10
+        let verticalPadding: CGFloat = 10
+        let windowRect = NSRect(
+            x: horizontalPadding,
+            y: verticalPadding,
+            width: mainScreen.frame.width - (horizontalPadding * 2),
+            height: mainScreen.frame.height - (verticalPadding * 2)
+        )
+
+        let window = NSWindow(
+            contentRect: windowRect,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let showcaseView = AllTemplatesShowcaseView(onClose: { [weak self] in
+            self?.showcaseWindow?.orderOut(nil)
+            self?.showcaseWindow = nil
+        })
+
+        let hostingView = NSHostingView(rootView: showcaseView)
+        hostingView.frame = window.contentView?.bounds ?? windowRect
+        hostingView.autoresizingMask = [.width, .height]
+        window.contentView = hostingView
+        window.makeKeyAndOrderFront(nil)
+
+        showcaseWindow = window
+        print("🎨 Showcase window created - size: \(windowRect.width)x\(windowRect.height)")
     }
 
     private func requestAllPermissions() async {

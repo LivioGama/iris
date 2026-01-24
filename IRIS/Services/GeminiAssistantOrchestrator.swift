@@ -57,7 +57,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // MARK: - Dynamic UI Properties
     @Published public var dynamicUISchema: DynamicUISchema? = nil // AI-generated UI schema
     @Published public var useDynamicUI: Bool = true // Toggle between dynamic UI and classic ICOI modes
-    @Published public var demoAllTemplates: Bool = true // When true, cycles through all UI component templates for testing
+    @Published public var demoAllTemplates: Bool = true // When true, shows demo control panel for testing UI templates
+    @Published public var autoShowDemoOnLaunch: Bool = false // When true, automatically displays the first demo template on launch
+    @Published public var showAllTemplatesShowcase: Bool = true // When true, shows all templates at once in a grid
 
     // MARK: - Services
     private let geminiClient: GeminiClient
