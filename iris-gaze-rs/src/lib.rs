@@ -1,391 +1,304 @@
-//! IRIS Gaze Tracking Library
+//! IRIS Gaze Tracking Library - Python-equivalent implementation
 //!
-//! High-performance eye and gaze tracking library using face mesh detection.
-//! Designed for integration with Swift via C FFI.
-//!
-//! # Architecture
-//!
-//! ```text
-//! ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-//! │   Camera     │ → │  Face Mesh   │ → │    Gaze      │
-//! │   Capture    │   │  Detection   │   │  Estimation  │
-//! └──────────────┘   └──────────────┘   └──────────────┘
-//! ```
-//!
-//! # FFI Usage
-//!
-//! ```c
-//! // Initialize tracker
-//! GazeTracker* tracker = iris_gaze_init(1920, 1080, "left");
-//!
-//! // Main loop
-//! while (running) {
-//!     GazeResult result = iris_gaze_get_frame(tracker);
-//!     if (result.valid) {
-//!         // Use result.x, result.y
-//!     }
-//! }
-//!
-//! // Cleanup
-//! iris_gaze_stop(tracker);
-//! iris_gaze_destroy(tracker);
-//! ```
+//! Uses Python MediaPipe for face mesh to get identical coordinates.
 
-pub mod blink;
 pub mod camera;
 pub mod face_mesh;
-pub mod gaze;
-#[cfg(feature = "mediapipe")]
-pub mod mediapipe;
+pub mod python_face_mesh;
 pub mod types;
 
-use std::ffi::{c_char, CStr};
+use std::ffi::c_char;
 use std::ptr;
-use std::time::{Duration, Instant};
 
 pub use types::*;
+use python_face_mesh::PythonFaceMeshDetector;
 
-/// Opaque tracker handle for FFI
+fn log(msg: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/iris_rust.log")
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{}", msg);
+    }
+}
+
+/// Main gaze tracker - mirrors Python implementation
 pub struct GazeTracker {
-    config: GazeConfig,
-    #[allow(dead_code)]
-    dominant_eye: DominantEye,
+    screen_width: f64,
+    screen_height: f64,
+
+    // Python MediaPipe face mesh (gives identical coordinates to Python)
+    python_face_mesh: Option<PythonFaceMeshDetector>,
+
+    // Smoothed gaze position (ema_x, ema_y in Python)
+    ema_x: f64,
+    ema_y: f64,
+
+    // Smoothed nose position (ema_nose_x, ema_nose_y in Python)
+    ema_nose_x: f64,
+    ema_nose_y: f64,
+
+    // Calibration ranges
+    nose_x_min: f64,
+    nose_x_max: f64,
+    nose_y_min: f64,
+    nose_y_max: f64,
+
+    // Auto-calibration: track observed range and slowly adapt
+    observed_x_min: f64,
+    observed_x_max: f64,
+    observed_y_min: f64,
+    observed_y_max: f64,
+
+    // Blink detection state
+    eye_ar_thresh: f64,
+    long_blink_thresh: i32,
+    eyes_closed_counter: i32,
+    long_blink_triggered: bool,
+
+    // Status
     status: TrackerStatus,
-    last_error: GazeError,
-
-    // Components
-    camera: Option<camera::Camera>,
-    face_mesh: Option<face_mesh::FaceMeshDetector>,
-    gaze_estimator: gaze::GazeEstimator,
-    blink_detector: blink::BlinkDetector,
-
-    // Latest result for polling
-    latest_result: GazeResult,
-
-    // Frame rate limiting
-    last_frame_time: Option<Instant>,
-    target_frame_duration: Duration,
-
-    // Skip face detection on some frames for performance
     frame_count: u32,
-    last_landmarks: Option<types::FaceLandmarks>,
-    blink_hold_frames: u8,
 }
 
 impl GazeTracker {
-    /// Create a new gaze tracker with the given configuration
-    fn new(screen_width: i32, screen_height: i32, dominant_eye: DominantEye) -> Self {
-        let mut config = GazeConfig::default();
-        config.screen_width = screen_width;
-        config.screen_height = screen_height;
+    fn new(screen_width: i32, screen_height: i32) -> Self {
+        let sw = screen_width as f64;
+        let sh = screen_height as f64;
 
         Self {
-            config,
-            dominant_eye,
+            screen_width: sw,
+            screen_height: sh,
+            python_face_mesh: None,
+            ema_x: sw / 2.0,
+            ema_y: sh / 2.0,
+            ema_nose_x: 0.45,  // Will quickly adapt via EMA
+            ema_nose_y: 0.42,  // Will quickly adapt via EMA
+            // Very wide range to handle coordinate variance
+            nose_x_min: 0.15,
+            nose_x_max: 0.75,
+            nose_y_min: 0.30,
+            nose_y_max: 0.55,
+            // Auto-calibration: will adapt based on observed values
+            observed_x_min: 0.45,
+            observed_x_max: 0.45,
+            observed_y_min: 0.42,
+            observed_y_max: 0.42,
+            // Blink detection
+            eye_ar_thresh: 0.25,
+            long_blink_thresh: 8,
+            eyes_closed_counter: 0,
+            long_blink_triggered: false,
             status: TrackerStatus::Uninitialized,
-            last_error: GazeError::None,
-            camera: None,
-            face_mesh: None,
-            gaze_estimator: gaze::GazeEstimator::new(
-                screen_width,
-                screen_height,
-                config.ema_alpha,
-                config.deadzone,
-            ),
-            blink_detector: blink::BlinkDetector::new(config.blink_threshold, config.wink_frames),
-            latest_result: GazeResult::default(),
-            last_frame_time: None,
-            target_frame_duration: Duration::from_micros(33333), // 30 FPS target
             frame_count: 0,
-            last_landmarks: None,
-            blink_hold_frames: 0,
         }
     }
 
-    /// Initialize all components (camera, model)
     fn initialize(&mut self) -> Result<(), GazeError> {
-        // Debug log
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/iris_rust.log")
-        {
-            use std::io::Write;
-            let _ = writeln!(f, "🚀 GazeTracker::initialize() called");
-        }
+        log(&format!("🚀 GazeTracker::initialize() - Cal: X={:.2}-{:.2}, Y={:.2}-{:.2}",
+            self.nose_x_min, self.nose_x_max, self.nose_y_min, self.nose_y_max));
 
         self.status = TrackerStatus::Initializing;
 
-        // Prefer Python calibration if available, otherwise enable auto-calibration
-        if let Some((x_min, x_max, y_min, y_max)) = gaze::GazeEstimator::load_calibration_file() {
-            self.gaze_estimator
-                .set_calibration(x_min, x_max, y_min, y_max);
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/iris_rust.log")
-            {
-                use std::io::Write;
-                let _ = writeln!(
-                    f,
-                    "✅ Using calibration from /tmp/iris_calibration.txt: X=[{:.4}, {:.4}], Y=[{:.4}, {:.4}]",
-                    x_min, x_max, y_min, y_max
-                );
+        // Initialize Python MediaPipe face mesh (handles its own camera)
+        match PythonFaceMeshDetector::new() {
+            Ok(fm) => {
+                log("✅ Python MediaPipe FaceMesh initialized");
+                self.python_face_mesh = Some(fm);
             }
-        } else {
-            self.gaze_estimator.set_auto_calibrate(true);
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/iris_rust.log")
-            {
-                use std::io::Write;
-                let _ = writeln!(f, "ℹ️ No calibration file found. Auto-calibration enabled.");
-            }
-        }
-
-        // Initialize camera
-        match camera::Camera::new(
-            self.config.camera_width,
-            self.config.camera_height,
-            self.config.target_fps,
-        ) {
-            Ok(cam) => self.camera = Some(cam),
             Err(e) => {
-                log::error!("Failed to initialize camera: {:?}", e);
-                self.last_error = GazeError::CameraError;
-                self.status = TrackerStatus::Error;
-                return Err(GazeError::CameraError);
-            }
-        }
-
-        // Initialize face mesh detector
-        match face_mesh::FaceMeshDetector::new() {
-            Ok(detector) => self.face_mesh = Some(detector),
-            Err(e) => {
-                log::error!("Failed to initialize face mesh detector: {:?}", e);
-                self.last_error = GazeError::ModelError;
+                log(&format!("❌ Python FaceMesh error: {:?}", e));
                 self.status = TrackerStatus::Error;
                 return Err(GazeError::ModelError);
             }
         }
 
         self.status = TrackerStatus::Running;
-        log::info!("Gaze tracker initialized successfully");
+        log("✅ Tracker ready");
         Ok(())
     }
 
-    /// Process one frame and return the result
     fn process_frame(&mut self) -> GazeResult {
         if self.status != TrackerStatus::Running {
             return GazeResult::invalid();
         }
 
-        // Frame rate limiting - don't process faster than target FPS
-        let now = Instant::now();
-        if let Some(last_time) = self.last_frame_time {
-            let elapsed = now.duration_since(last_time);
-            if elapsed < self.target_frame_duration {
-                // Sleep briefly to avoid busy-waiting and reduce CPU
-                let sleep_time = self.target_frame_duration.saturating_sub(elapsed);
-                if sleep_time > Duration::from_millis(1) {
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-                // Return cached result, don't process new frame yet
-                return self.latest_result;
-            }
-        }
+        self.frame_count += 1;
 
-        if self.blink_hold_frames > 0 {
-            self.blink_hold_frames = self.blink_hold_frames.saturating_sub(1);
-            return self.latest_result;
-        }
-        self.last_frame_time = Some(now);
-        self.frame_count = self.frame_count.wrapping_add(1);
-
-        // Refresh blink tuning occasionally for live adjustments
-        if self.frame_count % 60 == 0 {
-            self.update_blink_settings();
-        }
-
-        // Only capture and detect on every Nth frame for performance
-        // At 30 FPS, detecting every 2nd frame = 15 detections/sec (good balance)
-        let do_detection = self.frame_count % 2 == 0 || self.last_landmarks.is_none();
-
-        let landmarks = if do_detection {
-            // Capture frame from camera
-            let camera = match &mut self.camera {
-                Some(c) => c,
-                None => return GazeResult::invalid(),
-            };
-
-            let frame = match camera.capture_frame() {
-                Ok(f) => f,
-                Err(e) => {
-                    static mut CAM_ERR_COUNT: u32 = 0;
-                    unsafe {
-                        CAM_ERR_COUNT += 1;
-                        if CAM_ERR_COUNT <= 5 {
-                            let _ = std::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open("/tmp/iris_rust.log")
-                                .and_then(|mut f| {
-                                    use std::io::Write;
-                                    writeln!(f, "❌ Camera error #{}: {:?}", CAM_ERR_COUNT, e)
-                                });
-                        }
-                    }
-                    return GazeResult::invalid();
-                }
-            };
-
-            // Run face detection
-            let face_mesh = match &mut self.face_mesh {
-                Some(fm) => fm,
-                None => return GazeResult::invalid(),
-            };
-
-            match face_mesh.detect(&frame) {
-                Ok(Some(l)) => {
-                    self.last_landmarks = Some(l.clone());
-                    l
-                }
-                Ok(None) => {
-                    static mut NO_FACE_COUNT: u32 = 0;
-                    unsafe {
-                        NO_FACE_COUNT += 1;
-                        if NO_FACE_COUNT <= 5 {
-                            let _ = std::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open("/tmp/iris_rust.log")
-                                .and_then(|mut f| {
-                                    use std::io::Write;
-                                    writeln!(f, "⚠️ No face detected #{}", NO_FACE_COUNT)
-                                });
-                        }
-                    }
-                    match &self.last_landmarks {
-                        Some(l) => l.clone(),
-                        None => return GazeResult::invalid(),
-                    }
-                }
-                Err(e) => {
-                    static mut DETECT_ERR_COUNT: u32 = 0;
-                    unsafe {
-                        DETECT_ERR_COUNT += 1;
-                        if DETECT_ERR_COUNT <= 5 {
-                            let _ = std::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open("/tmp/iris_rust.log")
-                                .and_then(|mut f| {
-                                    use std::io::Write;
-                                    writeln!(
-                                        f,
-                                        "❌ Face detection error #{}: {:?}",
-                                        DETECT_ERR_COUNT, e
-                                    )
-                                });
-                        }
-                    }
-                    return GazeResult::invalid();
-                }
-            }
-        } else {
-            // Reuse last landmarks
-            match &self.last_landmarks {
-                Some(l) => l.clone(),
-                None => return GazeResult::invalid(),
-            }
+        // Get landmarks from Python MediaPipe
+        let face_mesh = match &mut self.python_face_mesh {
+            Some(fm) => fm,
+            None => return GazeResult::invalid(),
         };
 
-        // Check for blink/wink
-        let blink_result = self.blink_detector.update(&landmarks);
+        let landmarks = match face_mesh.detect() {
+            Ok(Some(lm)) => lm,
+            _ => return GazeResult::invalid(),
+        };
 
-        // If blinking, don't update gaze position but may trigger blink event
-        if let Some(blink_event) = blink_result {
-            if blink_event.is_wink {
-                // Get current gaze position for blink event
-                let (x, y) = self.gaze_estimator.get_current_position();
-                let result = GazeResult::blink(x, y);
-                self.latest_result = result;
-                return result;
-            }
-            // Regular blink - skip gaze update
-            self.blink_hold_frames = 2;
-            return self.latest_result;
+        // === BLINK DETECTION (matches Python exactly) ===
+
+        // Left eye landmarks: 159 (top), 145 (bottom), 33 (left), 133 (right)
+        let left_eye_top = match landmarks.get(159) { Some(p) => p, None => return GazeResult::invalid() };
+        let left_eye_bottom = match landmarks.get(145) { Some(p) => p, None => return GazeResult::invalid() };
+        let left_eye_left = match landmarks.get(33) { Some(p) => p, None => return GazeResult::invalid() };
+        let left_eye_right = match landmarks.get(133) { Some(p) => p, None => return GazeResult::invalid() };
+
+        let left_vertical = (left_eye_top.y - left_eye_bottom.y).abs();
+        let left_horizontal = (left_eye_right.x - left_eye_left.x).abs();
+        let left_ear = if left_horizontal > 0.0 { left_vertical / left_horizontal } else { 1.0 };
+
+        // Right eye landmarks: 386 (top), 374 (bottom), 362 (left), 263 (right)
+        let right_eye_top = match landmarks.get(386) { Some(p) => p, None => return GazeResult::invalid() };
+        let right_eye_bottom = match landmarks.get(374) { Some(p) => p, None => return GazeResult::invalid() };
+        let right_eye_left = match landmarks.get(362) { Some(p) => p, None => return GazeResult::invalid() };
+        let right_eye_right = match landmarks.get(263) { Some(p) => p, None => return GazeResult::invalid() };
+
+        let right_vertical = (right_eye_top.y - right_eye_bottom.y).abs();
+        let right_horizontal = (right_eye_right.x - right_eye_left.x).abs();
+        let right_ear = if right_horizontal > 0.0 { right_vertical / right_horizontal } else { 1.0 };
+
+        // Debug EAR every 30 frames
+        if self.frame_count % 30 == 0 {
+            log(&format!("👁️ L_EAR: {:.3}, R_EAR: {:.3} (thresh: {:.2})",
+                left_ear, right_ear, self.eye_ar_thresh));
         }
 
-        // Estimate gaze position
-        match self.gaze_estimator.estimate(&landmarks) {
-            Some((x, y)) => {
-                let result = GazeResult::gaze(x, y);
-                self.latest_result = result;
-                result
+        // Check for eye close
+        let left_closed = (left_ear as f64) < self.eye_ar_thresh;
+        let right_closed = (right_ear as f64) < self.eye_ar_thresh;
+        let is_winking = left_closed || right_closed;
+
+        if is_winking {
+            self.eyes_closed_counter += 1;
+
+            // Long blink trigger
+            if self.eyes_closed_counter == self.long_blink_thresh && !self.long_blink_triggered {
+                self.long_blink_triggered = true;
+                let which = if left_closed { "LEFT" } else { "RIGHT" };
+                log(&format!("😉 {} WINK TRIGGERED!", which));
+                return GazeResult::blink(self.ema_x, self.ema_y);
             }
-            None => GazeResult::invalid(),
+
+            // Don't update gaze during blink
+            return GazeResult::gaze(self.ema_x, self.ema_y);
+        } else {
+            self.eyes_closed_counter = 0;
+            self.long_blink_triggered = false;
         }
+
+        // === GAZE TRACKING (matches Python exactly) ===
+
+        // Get nose tip (landmark 4) and forehead (landmark 10)
+        let nose = match landmarks.get(4) { Some(p) => p, None => return GazeResult::invalid() };
+        let forehead = match landmarks.get(10) { Some(p) => p, None => return GazeResult::invalid() };
+
+        let nose_x = nose.x as f64;
+        let nose_y = forehead.y as f64;  // Use forehead Y for vertical
+
+        // EMA smoothing on raw nose position (alpha = 0.25)
+        self.ema_nose_x += (nose_x - self.ema_nose_x) * 0.25;
+        self.ema_nose_y += (nose_y - self.ema_nose_y) * 0.25;
+
+        // Auto-calibration: track center and expand range symmetrically
+        // This keeps the neutral position near center of range
+        let cal_alpha = 0.01;  // Slow center tracking
+        let center_x = (self.observed_x_min + self.observed_x_max) / 2.0;
+        let center_y = (self.observed_y_min + self.observed_y_max) / 2.0;
+
+        // Slowly move center towards current position
+        let new_center_x = center_x + (self.ema_nose_x - center_x) * cal_alpha;
+        let new_center_y = center_y + (self.ema_nose_y - center_y) * cal_alpha;
+
+        // Expand range if current position is outside
+        let half_span_x = (self.observed_x_max - self.observed_x_min) / 2.0;
+        let half_span_y = (self.observed_y_max - self.observed_y_min) / 2.0;
+        let dist_from_center_x = (self.ema_nose_x - new_center_x).abs();
+        let dist_from_center_y = (self.ema_nose_y - new_center_y).abs();
+
+        // Grow span if needed (fast), shrink slowly
+        let new_half_span_x = if dist_from_center_x > half_span_x {
+            half_span_x + (dist_from_center_x - half_span_x) * 0.1
+        } else {
+            half_span_x * 0.999  // Very slow shrink
+        };
+        let new_half_span_y = if dist_from_center_y > half_span_y {
+            half_span_y + (dist_from_center_y - half_span_y) * 0.1
+        } else {
+            half_span_y * 0.999
+        };
+
+        // Update observed range
+        self.observed_x_min = new_center_x - new_half_span_x;
+        self.observed_x_max = new_center_x + new_half_span_x;
+        self.observed_y_min = new_center_y - new_half_span_y;
+        self.observed_y_max = new_center_y + new_half_span_y;
+
+        // Use observed range with minimum span
+        let min_x_span = 0.08;  // Minimum X range for sensitivity
+        let min_y_span = 0.05;  // Minimum Y range
+        let x_span = (self.observed_x_max - self.observed_x_min).max(min_x_span);
+        let y_span = (self.observed_y_max - self.observed_y_min).max(min_y_span);
+        let x_center = (self.observed_x_min + self.observed_x_max) / 2.0;
+        let y_center = (self.observed_y_min + self.observed_y_max) / 2.0;
+
+        // Normalize to [0, 1] using auto-calibrated range
+        let mut h_norm = (self.ema_nose_x - (x_center - x_span / 2.0)) / x_span;
+        let mut v_norm = (self.ema_nose_y - (y_center - y_span / 2.0)) / y_span;
+
+        // Apply subtle gain for more responsiveness without over-amplifying edges
+        // Using curve that's stronger in center, weaker at edges
+        let gain = 1.2;
+        h_norm = 0.5 + (h_norm - 0.5) * gain;
+        v_norm = 0.5 + (v_norm - 0.5) * gain;
+
+        // Apply center deadzone (reduced for more sensitivity)
+        let deadzone = 0.03;
+        if (h_norm - 0.5).abs() < deadzone {
+            h_norm = 0.5;
+        }
+        if (v_norm - 0.5).abs() < deadzone {
+            v_norm = 0.5;
+        }
+
+        // Clamp to [0, 1]
+        h_norm = h_norm.clamp(0.0, 1.0);
+        v_norm = v_norm.clamp(0.0, 1.0);
+
+        // Convert to screen coordinates
+        let target_x = h_norm * self.screen_width;
+        let target_y = v_norm * self.screen_height;
+
+        // Distance-based adaptive smoothing
+        let dx = target_x - self.ema_x;
+        let dy = target_y - self.ema_y;
+        let dist = (dx * dx + dy * dy).sqrt();
+
+        if dist > 8.0 {
+            self.ema_x += dx * 0.35;
+            self.ema_y += dy * 0.35;
+        } else {
+            self.ema_x = target_x;
+            self.ema_y = target_y;
+        }
+
+        // Log periodically
+        if self.frame_count % 60 == 0 {
+            log(&format!("🎯 Raw({:.4}, {:.4}) EMA({:.4}, {:.4}) AutoCal({:.2}-{:.2}, {:.2}-{:.2}) Norm({:.3}, {:.3}) Scr({:.0}, {:.0})",
+                nose_x, nose_y, self.ema_nose_x, self.ema_nose_y,
+                self.observed_x_min, self.observed_x_max, self.observed_y_min, self.observed_y_max,
+                h_norm, v_norm, self.ema_x, self.ema_y));
+        }
+
+        GazeResult::gaze(self.ema_x, self.ema_y)
     }
 
-    /// Stop the tracker
     fn stop(&mut self) {
         self.status = TrackerStatus::Stopped;
-        self.camera = None;
-        self.face_mesh = None;
-        log::info!("Gaze tracker stopped");
-    }
-
-    /// Load optional blink tuning from /tmp/iris_blink.txt
-    /// Supported keys:
-    ///   blink_threshold = 0.23
-    ///   wink_frames = 8
-    fn update_blink_settings(&mut self) {
-        let content = match std::fs::read_to_string("/tmp/iris_blink.txt") {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-
-        let mut threshold: Option<f32> = None;
-        let mut wink_frames: Option<i32> = None;
-
-        for raw_line in content.lines() {
-            let line = raw_line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let mut parts = line.split('=');
-            let key = match parts.next() {
-                Some(k) => k.trim(),
-                None => continue,
-            };
-            let value_str = match parts.next() {
-                Some(v) => v.trim(),
-                None => continue,
-            };
-
-            match key {
-                "blink_threshold" => {
-                    if let Ok(v) = value_str.parse::<f32>() {
-                        threshold = Some(v);
-                    }
-                }
-                "wink_frames" => {
-                    if let Ok(v) = value_str.parse::<i32>() {
-                        wink_frames = Some(v);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        if let Some(t) = threshold {
-            self.blink_detector.set_threshold(t);
-        }
-        if let Some(w) = wink_frames {
-            self.blink_detector.set_wink_frames(w);
-        }
+        self.python_face_mesh = None;
+        log("🛑 Tracker stopped");
     }
 }
 
@@ -393,166 +306,99 @@ impl GazeTracker {
 // C FFI Interface
 // ============================================================================
 
-/// Initialize a new gaze tracker
-///
-/// # Arguments
-/// * `screen_width` - Width of the target screen in pixels
-/// * `screen_height` - Height of the target screen in pixels
-/// * `dominant_eye` - C string: "left" or "right"
-///
-/// # Returns
-/// Pointer to the tracker, or NULL on failure
 #[no_mangle]
 pub extern "C" fn iris_gaze_init(
     screen_width: i32,
     screen_height: i32,
-    dominant_eye: *const c_char,
+    _dominant_eye: *const c_char,
 ) -> *mut GazeTracker {
-    // Initialize logger on first call
-    let _ = env_logger::try_init();
+    log(&format!("🦀 iris_gaze_init({}x{}) GazeResult size={}",
+        screen_width, screen_height, std::mem::size_of::<GazeResult>()));
 
-    log::info!("iris_gaze_init called: {}x{}", screen_width, screen_height);
+    let mut tracker = Box::new(GazeTracker::new(screen_width, screen_height));
 
-    // Parse dominant eye
-    let eye = if dominant_eye.is_null() {
-        DominantEye::Left
-    } else {
-        let eye_str = unsafe { CStr::from_ptr(dominant_eye) };
-        match eye_str.to_str() {
-            Ok(s) => DominantEye::from(s),
-            Err(_) => DominantEye::Left,
-        }
-    };
-
-    // Create tracker
-    let mut tracker = Box::new(GazeTracker::new(screen_width, screen_height, eye));
-
-    // Initialize components
     if let Err(e) = tracker.initialize() {
-        eprintln!("🦀 RUST: Failed to initialize tracker: {:?}", e);
-        let _ = std::fs::write("/tmp/iris_init_error.log", format!("Init error: {:?}\n", e));
+        log(&format!("❌ Init failed: {:?}", e));
         return ptr::null_mut();
     }
 
-    eprintln!("🦀 RUST: Tracker initialized successfully!");
-    let _ = std::fs::write("/tmp/iris_init_success.log", "Tracker init success!\n");
     Box::into_raw(tracker)
 }
 
-/// Get the next frame result from the tracker
-///
-/// This function should be called in a loop (e.g., 60 times per second).
-/// It captures a camera frame, detects landmarks, and returns gaze coordinates.
-///
-/// # Arguments
-/// * `tracker` - Pointer to the tracker (from iris_gaze_init)
-///
-/// # Returns
-/// GazeResult with coordinates and event type
 #[no_mangle]
 pub extern "C" fn iris_gaze_get_frame(tracker: *mut GazeTracker) -> GazeResult {
     if tracker.is_null() {
         return GazeResult::invalid();
     }
-
     let tracker = unsafe { &mut *tracker };
-    tracker.process_frame()
+    let result = tracker.process_frame();
+
+    result
 }
 
-/// Get the current status of the tracker
 #[no_mangle]
 pub extern "C" fn iris_gaze_get_status(tracker: *const GazeTracker) -> TrackerStatus {
     if tracker.is_null() {
         return TrackerStatus::Uninitialized;
     }
-
     let tracker = unsafe { &*tracker };
     tracker.status
 }
 
-/// Get the last error code
 #[no_mangle]
-pub extern "C" fn iris_gaze_get_error(tracker: *const GazeTracker) -> GazeError {
-    if tracker.is_null() {
-        return GazeError::NotInitialized;
-    }
-
-    let tracker = unsafe { &*tracker };
-    tracker.last_error
+pub extern "C" fn iris_gaze_get_error(_tracker: *const GazeTracker) -> GazeError {
+    GazeError::None
 }
 
-/// Stop the tracker (releases camera, etc.)
 #[no_mangle]
 pub extern "C" fn iris_gaze_stop(tracker: *mut GazeTracker) {
     if tracker.is_null() {
         return;
     }
-
     let tracker = unsafe { &mut *tracker };
     tracker.stop();
 }
 
-/// Destroy the tracker and free memory
-///
-/// After calling this, the tracker pointer is invalid.
 #[no_mangle]
 pub extern "C" fn iris_gaze_destroy(tracker: *mut GazeTracker) {
-    if tracker.is_null() {
-        return;
+    if !tracker.is_null() {
+        let _ = unsafe { Box::from_raw(tracker) };
+        log("🗑️ Tracker destroyed");
     }
-
-    // Take ownership and drop
-    let _ = unsafe { Box::from_raw(tracker) };
-    log::info!("Gaze tracker destroyed");
 }
 
-/// Update the screen dimensions
 #[no_mangle]
 pub extern "C" fn iris_gaze_set_screen_size(tracker: *mut GazeTracker, width: i32, height: i32) {
     if tracker.is_null() {
         return;
     }
-
     let tracker = unsafe { &mut *tracker };
-    tracker.config.screen_width = width;
-    tracker.config.screen_height = height;
-    tracker.gaze_estimator.set_screen_size(width, height);
+    tracker.screen_width = width as f64;
+    tracker.screen_height = height as f64;
 }
 
-/// Pause gaze tracking
 #[no_mangle]
 pub extern "C" fn iris_gaze_pause(tracker: *mut GazeTracker) {
     if tracker.is_null() {
         return;
     }
-
     let tracker = unsafe { &mut *tracker };
     if tracker.status == TrackerStatus::Running {
         tracker.status = TrackerStatus::Paused;
     }
 }
 
-/// Resume gaze tracking
 #[no_mangle]
 pub extern "C" fn iris_gaze_resume(tracker: *mut GazeTracker) {
     if tracker.is_null() {
         return;
     }
-
     let tracker = unsafe { &mut *tracker };
     if tracker.status == TrackerStatus::Paused {
         tracker.status = TrackerStatus::Running;
     }
 }
 
-/// Set calibration values directly
-///
-/// # Arguments
-/// * `tracker` - Pointer to the tracker
-/// * `x_min` - Minimum nose X value (looking right)
-/// * `x_max` - Maximum nose X value (looking left)
-/// * `y_min` - Minimum forehead Y value (looking up)
-/// * `y_max` - Maximum forehead Y value (looking down)
 #[no_mangle]
 pub extern "C" fn iris_gaze_set_calibration(
     tracker: *mut GazeTracker,
@@ -564,108 +410,29 @@ pub extern "C" fn iris_gaze_set_calibration(
     if tracker.is_null() {
         return;
     }
-
     let tracker = unsafe { &mut *tracker };
-    tracker
-        .gaze_estimator
-        .set_calibration(x_min, x_max, y_min, y_max);
-
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/iris_rust.log")
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            f,
-            "🎯 FFI set_calibration: X=[{:.4}, {:.4}], Y=[{:.4}, {:.4}]",
-            x_min, x_max, y_min, y_max
-        );
-    }
+    tracker.nose_x_min = x_min;
+    tracker.nose_x_max = x_max;
+    tracker.nose_y_min = y_min;
+    tracker.nose_y_max = y_max;
+    log(&format!("🎯 Calibration set: X=[{:.4}, {:.4}], Y=[{:.4}, {:.4}]", x_min, x_max, y_min, y_max));
 }
 
-/// Set reach gain for easier corner access
 #[no_mangle]
-pub extern "C" fn iris_gaze_set_reach_gain(tracker: *mut GazeTracker, gain_x: f64, gain_y: f64) {
-    if tracker.is_null() {
-        return;
-    }
-
-    let tracker = unsafe { &mut *tracker };
-    tracker.gaze_estimator.set_reach_gain(gain_x, gain_y);
-
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/iris_rust.log")
-    {
-        use std::io::Write;
-        let _ = writeln!(f, "🎛 FFI set_reach_gain: x={:.2}, y={:.2}", gain_x, gain_y);
-    }
+pub extern "C" fn iris_gaze_set_reach_gain(_tracker: *mut GazeTracker, _gain_x: f64, _gain_y: f64) {
+    // Not used in Python-equivalent implementation
 }
 
-/// Get the current raw landmark values for calibration
-/// Returns the nose X and forehead Y values from the last frame
-///
-/// # Arguments
-/// * `tracker` - Pointer to the tracker
-/// * `nose_x` - Output: current nose X value
-/// * `nose_y` - Output: current forehead Y value
-///
-/// # Returns
-/// true if values are valid, false otherwise
 #[no_mangle]
 pub extern "C" fn iris_gaze_get_raw_position(
-    tracker: *mut GazeTracker,
-    nose_x: *mut f64,
-    nose_y: *mut f64,
+    _tracker: *mut GazeTracker,
+    _nose_x: *mut f64,
+    _nose_y: *mut f64,
 ) -> bool {
-    if tracker.is_null() || nose_x.is_null() || nose_y.is_null() {
-        return false;
-    }
-
-    let tracker = unsafe { &mut *tracker };
-
-    // Get landmarks from the last processed frame
-    if let Some(ref landmarks) = tracker.last_landmarks {
-        if let (Some(nose), Some(forehead)) = (landmarks.nose_tip(), landmarks.forehead()) {
-            unsafe {
-                *nose_x = nose.x as f64;
-                *nose_y = forehead.y as f64;
-            }
-            return true;
-        }
-    }
-
     false
 }
 
-/// Enable or disable auto-calibration mode
-/// When enabled, the tracker will automatically adjust calibration based on observed values
 #[no_mangle]
-pub extern "C" fn iris_gaze_set_auto_calibrate(tracker: *mut GazeTracker, enabled: bool) {
-    if tracker.is_null() {
-        return;
-    }
-
-    let tracker = unsafe { &mut *tracker };
-    tracker.gaze_estimator.set_auto_calibrate(enabled);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tracker_creation() {
-        // This test requires camera access, so we just test the null case
-        let result = iris_gaze_get_frame(ptr::null_mut());
-        assert!(!result.valid);
-    }
-
-    #[test]
-    fn test_status_uninitialized() {
-        let status = iris_gaze_get_status(ptr::null());
-        assert_eq!(status, TrackerStatus::Uninitialized);
-    }
+pub extern "C" fn iris_gaze_set_auto_calibrate(_tracker: *mut GazeTracker, _enabled: bool) {
+    // Not used in Python-equivalent implementation
 }

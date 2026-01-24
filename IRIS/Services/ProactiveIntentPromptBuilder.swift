@@ -14,37 +14,48 @@ class ProactiveIntentPromptBuilder {
     /// Builds the system prompt for proactive intent analysis
     func buildSystemPrompt() -> String {
         return """
-        You are an intelligent assistant that analyzes screenshots to predict what the user might want to do.
+        You are an intelligent assistant. The user is looking at their screen and wants help. Analyze what they see and suggest what they might need.
 
-        Your task is to:
-        1. Analyze the screenshot content (application, visible text, UI elements, context)
-        2. Predict 1-3 most likely actions the user might want to take
-        3. Return your analysis in a specific JSON format
+        ## Your Task
 
-        ## Guidelines for Suggestions
-
-        - Suggest actions that are CONTEXTUALLY RELEVANT to what's visible
-        - Order suggestions by likelihood (most likely first)
-        - Use clear, concise labels that describe the action
-        - Set confidence scores based on how obvious the intent is:
-          - 0.8-1.0: Very obvious intent (e.g., code visible → "Improve this code")
-          - 0.5-0.8: Likely intent based on context
-          - 0.3-0.5: Possible but less certain
+        1. Understand what the user is looking at
+        2. Infer what they might be trying to do or what problem they have
+        3. Suggest 1-3 helpful actions based on the current state of the screen
 
         ## Intent Types
 
-        Use these intent identifiers:
-        - `code_improvement`: For code that could be improved/refactored
-        - `explain`: To explain what something does or means
-        - `summarize`: To summarize content (articles, documents, long text)
-        - `reply`: To help compose a reply to a message
-        - `find_bugs`: To find bugs or issues in code
-        - `translate`: To translate text to another language
-        - `analyze`: General analysis of content
+        - `generate`: Create new content
+        - `improve`: Make existing content better
+        - `explain`: Help understand something
+        - `summarize`: Condense long content
+        - `reply`: Help compose a response
+        - `fix`: Fix an error or problem
+        - `complete`: Finish something partial
+        - `translate`: Convert to another language
+        - `analyze`: Examine and provide insights
+
+        ## Examples
+
+        | Screen State | Good Suggestions |
+        |--------------|------------------|
+        | Empty terminal prompt | "Generate a command", "Help me run something" |
+        | Terminal with error output | "Fix this error", "Explain what went wrong" |
+        | Terminal with command output | "Explain this output" |
+        | Code file with functions | "Improve this code", "Find bugs", "Explain this" |
+        | Empty code file | "Generate code", "Create boilerplate" |
+        | Chat with received message | "Draft a reply", "Summarize conversation" |
+        | Email inbox | "Summarize emails", "Draft response" |
+        | Article or documentation | "Summarize this", "Extract key points" |
+        | Form with empty fields | "Help fill this out" |
+        | Error dialog | "Fix this error", "Explain this error" |
+        | Search results | "Summarize results", "Find best match" |
+        | Spreadsheet with data | "Analyze this data", "Create chart" |
+        | Design tool | "Improve layout", "Suggest colors" |
+        | Calendar | "Schedule suggestion", "Summarize my day" |
 
         ## Response Format
 
-        You MUST respond with ONLY valid JSON in this exact format:
+        Return ONLY valid JSON:
 
         ```json
         {
@@ -53,7 +64,7 @@ class ProactiveIntentPromptBuilder {
             {
               "id": 1,
               "intent": "intent_type",
-              "label": "User-friendly action label",
+              "label": "Action label (2-5 words)",
               "confidence": 0.85,
               "auto_execute": false
             }
@@ -61,25 +72,20 @@ class ProactiveIntentPromptBuilder {
         }
         ```
 
-        IMPORTANT:
-        - Return ONLY the JSON, no other text
-        - Always include 1-3 suggestions
-        - Labels should be SHORT (2-5 words)
-        - Set auto_execute to true ONLY if confidence > 0.9 AND the action is safe
+        ## Rules
+
+        - Suggest actions relevant to WHAT'S VISIBLE, not generic actions
+        - Labels should be short and action-oriented
+        - Order by relevance (most useful first)
+        - 1-3 suggestions maximum
+        - Set auto_execute: true only if confidence > 0.9 and action is safe
         """
     }
 
     /// Builds the user prompt with the screenshot context
     func buildUserPrompt() -> String {
         return """
-        Analyze this screenshot and suggest what the user might want to do.
-
-        Consider:
-        - What application or content is visible?
-        - Is there code, text, messages, or other content?
-        - What are the most useful actions for this context?
-
-        Return your suggestions as JSON.
+        What is the user looking at, and what might they need help with? Return JSON.
         """
     }
 
@@ -123,14 +129,14 @@ class ProactiveIntentPromptBuilder {
     /// Creates a fallback response when JSON parsing fails
     private func createFallbackResponse(from response: String) -> ProactiveSuggestionsResponse {
         // Default suggestions when we can't parse Gemini's response
+        // Keep them generic but action-oriented
         let fallbackSuggestions = [
-            ProactiveSuggestion(id: 1, intent: "explain", label: "Explain this", confidence: 0.6),
-            ProactiveSuggestion(id: 2, intent: "summarize", label: "Summarize", confidence: 0.5),
-            ProactiveSuggestion(id: 3, intent: "analyze", label: "Analyze", confidence: 0.4)
+            ProactiveSuggestion(id: 1, intent: "generate", label: "Help me with this", confidence: 0.5),
+            ProactiveSuggestion(id: 2, intent: "explain", label: "Explain what I see", confidence: 0.4)
         ]
 
         return ProactiveSuggestionsResponse(
-            context: "Unable to analyze screenshot",
+            context: "Screen content",
             suggestions: fallbackSuggestions
         )
     }

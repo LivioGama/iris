@@ -190,6 +190,11 @@ pub struct FaceLandmarks {
 }
 
 impl FaceLandmarks {
+    /// Create from vector of landmarks
+    pub fn new(landmarks: Vec<Point3D>) -> Self {
+        Self { landmarks }
+    }
+
     /// MediaPipe landmark indices
     pub const NOSE_TIP: usize = 4;
     pub const FOREHEAD: usize = 10;
@@ -205,6 +210,11 @@ impl FaceLandmarks {
     pub const RIGHT_EYE_BOTTOM: usize = 374;
     pub const RIGHT_EYE_LEFT: usize = 362;
     pub const RIGHT_EYE_RIGHT: usize = 263;
+
+    /// Get landmark by index
+    pub fn get(&self, index: usize) -> Option<&Point3D> {
+        self.landmarks.get(index)
+    }
 
     /// Get nose tip position for horizontal tracking
     pub fn nose_tip(&self) -> Option<Point3D> {

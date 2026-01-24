@@ -104,7 +104,7 @@ typedef enum TrackerStatus {
 } TrackerStatus;
 
 /**
- * Opaque tracker handle for FFI
+ * Main gaze tracker - mirrors Python implementation
  */
 typedef struct GazeTracker GazeTracker;
 
@@ -130,88 +130,28 @@ typedef struct GazeResult {
   bool valid;
 } GazeResult;
 
-typedef struct MPFaceLandmarker {
-
-} MPFaceLandmarker;
-
-/**
- * Initialize a new gaze tracker
- *
- * # Arguments
- * * `screen_width` - Width of the target screen in pixels
- * * `screen_height` - Height of the target screen in pixels
- * * `dominant_eye` - C string: "left" or "right"
- *
- * # Returns
- * Pointer to the tracker, or NULL on failure
- */
 
 struct GazeTracker *iris_gaze_init(int32_t screen_width,
                                    int32_t screen_height,
-                                   const char *dominant_eye)
+                                   const char *_dominant_eye)
 ;
 
-/**
- * Get the next frame result from the tracker
- *
- * This function should be called in a loop (e.g., 60 times per second).
- * It captures a camera frame, detects landmarks, and returns gaze coordinates.
- *
- * # Arguments
- * * `tracker` - Pointer to the tracker (from iris_gaze_init)
- *
- * # Returns
- * GazeResult with coordinates and event type
- */
  struct GazeResult iris_gaze_get_frame(struct GazeTracker *tracker) ;
 
-/**
- * Get the current status of the tracker
- */
  enum TrackerStatus iris_gaze_get_status(const struct GazeTracker *tracker) ;
 
-/**
- * Get the last error code
- */
- enum GazeError iris_gaze_get_error(const struct GazeTracker *tracker) ;
+ enum GazeError iris_gaze_get_error(const struct GazeTracker *_tracker) ;
 
-/**
- * Stop the tracker (releases camera, etc.)
- */
  void iris_gaze_stop(struct GazeTracker *tracker) ;
 
-/**
- * Destroy the tracker and free memory
- *
- * After calling this, the tracker pointer is invalid.
- */
  void iris_gaze_destroy(struct GazeTracker *tracker) ;
 
-/**
- * Update the screen dimensions
- */
  void iris_gaze_set_screen_size(struct GazeTracker *tracker, int32_t width, int32_t height) ;
 
-/**
- * Pause gaze tracking
- */
  void iris_gaze_pause(struct GazeTracker *tracker) ;
 
-/**
- * Resume gaze tracking
- */
  void iris_gaze_resume(struct GazeTracker *tracker) ;
 
-/**
- * Set calibration values directly
- *
- * # Arguments
- * * `tracker` - Pointer to the tracker
- * * `x_min` - Minimum nose X value (looking right)
- * * `x_max` - Maximum nose X value (looking left)
- * * `y_min` - Minimum forehead Y value (looking up)
- * * `y_max` - Maximum forehead Y value (looking down)
- */
 
 void iris_gaze_set_calibration(struct GazeTracker *tracker,
                                double x_min,
@@ -220,40 +160,10 @@ void iris_gaze_set_calibration(struct GazeTracker *tracker,
                                double y_max)
 ;
 
-/**
- * Set reach gain for easier corner access
- */
- void iris_gaze_set_reach_gain(struct GazeTracker *tracker, double gain_x, double gain_y) ;
+ void iris_gaze_set_reach_gain(struct GazeTracker *_tracker, double _gain_x, double _gain_y) ;
 
-/**
- * Get the current raw landmark values for calibration
- * Returns the nose X and forehead Y values from the last frame
- *
- * # Arguments
- * * `tracker` - Pointer to the tracker
- * * `nose_x` - Output: current nose X value
- * * `nose_y` - Output: current forehead Y value
- *
- * # Returns
- * true if values are valid, false otherwise
- */
- bool iris_gaze_get_raw_position(struct GazeTracker *tracker, double *nose_x, double *nose_y) ;
+ bool iris_gaze_get_raw_position(struct GazeTracker *_tracker, double *_nose_x, double *_nose_y) ;
 
-/**
- * Enable or disable auto-calibration mode
- * When enabled, the tracker will automatically adjust calibration based on observed values
- */
- void iris_gaze_set_auto_calibrate(struct GazeTracker *tracker, bool enabled) ;
-
-extern struct MPFaceLandmarker *mp_face_landmarker_create(const char *model_path);
-
-extern void mp_face_landmarker_destroy(struct MPFaceLandmarker *landmarker);
-
-extern bool mp_face_landmarker_process(struct MPFaceLandmarker *landmarker,
-                                       const uint8_t *rgb_data,
-                                       int32_t width,
-                                       int32_t height,
-                                       float *out_landmarks,
-                                       int32_t out_len);
+ void iris_gaze_set_auto_calibrate(struct GazeTracker *_tracker, bool _enabled) ;
 
 #endif  /* IRIS_GAZE_H */

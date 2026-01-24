@@ -7,6 +7,12 @@ import IRISGaze
 import IRISNetwork
 import IRISMedia
 
+// MARK: - Settings (Easy to change)
+
+/// When true, the gaze indicator snaps to the center of detected elements
+/// instead of following the raw gaze position freely
+let kSnapIndicatorToElement = true
+
 extension String {
     func appendLine(to path: String) throws {
         let line = self + "\n"
@@ -48,6 +54,7 @@ class IRISCoordinator: ObservableObject {
     @Published var gazePoint: CGPoint = CGPoint(x: 960, y: 540)
     @Published var gazeDebugInfo: String = ""
     @Published var shouldAcceptMouseEvents: Bool = false
+
 
     var currentScreen: NSScreen? = NSScreen.main {
         didSet {

@@ -103,26 +103,6 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private let skipVoiceInput = false
     private let hardcodedPrompt = ""
 
-    // MOCK FLAG: Return mock response instead of calling Gemini API
-    private let mockGeminiResponse = true
-    private let mockResponseText = """
-    ```response
-    I've improved your code with better variable naming, error handling, and modern Swift practices.
-    ```
-
-    ```ui-schema
-    {
-      "layout": {"direction": "vertical", "spacing": "lg", "maxWidth": 900, "padding": "lg", "alignment": "leading"},
-      "theme": {"accentColor": "#0066FF", "secondaryColor": "#00D4FF", "background": "darker", "mood": "analytical", "icon": "💻", "title": "Code Improvement"},
-      "components": [
-        {"codeComparison": {"beforeCode": "func process(d: [String: Any]) -> Bool {\\n  if d[\\"name\\"] != nil {\\n    print(d[\\"name\\"]!)\\n    return true\\n  }\\n  return false\\n}", "afterCode": "func processUserData(_ userData: [String: Any]) -> Bool {\\n  guard let userName = userData[\\"name\\"] as? String else {\\n    return false\\n  }\\n  print(userName)\\n  return true\\n}", "language": "swift", "improvements": ["Descriptive function and parameter names", "Safe unwrapping with guard-let", "Proper type casting", "Eliminated force unwrap"]}},
-        {"callout": {"type": "tip", "title": "Pro Tip", "message": "Always prefer guard-let over force unwrapping to prevent runtime crashes."}}
-      ],
-      "screenshotConfig": {"visible": false, "position": "hidden", "size": "small", "opacity": 0.8}
-    }
-    ```
-    """
-
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility
 
@@ -680,25 +660,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         do {
             print("🌐 analyzeScreenshotForIntent: Sending to Gemini...")
 
-            let responseText: String
-            if mockGeminiResponse {
-                // Mock proactive response for testing
-                responseText = """
-                ```json
-                {
-                  "context": "Code editor with Swift code visible",
-                  "suggestions": [
-                    {"id": 1, "intent": "code_improvement", "label": "Improve this code", "confidence": 0.85, "auto_execute": false},
-                    {"id": 2, "intent": "explain", "label": "Explain what this does", "confidence": 0.70, "auto_execute": false},
-                    {"id": 3, "intent": "find_bugs", "label": "Find potential bugs", "confidence": 0.60, "auto_execute": false}
-                  ]
-                }
-                ```
-                """
-            } else {
-                // Send non-streaming request for faster response
-                responseText = try await geminiClient.sendRequest(history: [message])
-            }
+            // Send non-streaming request for faster response
+            let responseText = try await geminiClient.sendRequest(history: [message])
 
             print("✅ analyzeScreenshotForIntent: Got response")
 
@@ -1062,8 +1025,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         conversationManager.addMessage(initialMessage)
 
-        // Send streaming request
-        print("🌐 About to send Gemini API streaming request...")
+        // Choose request mode based on whether we need to parse structured data
+        print("🌐 About to send Gemini API request...")
         do {
             // Clear previous live response
             await MainActor.run {
@@ -1071,13 +1034,37 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             }
 
             let responseText: String
-            if mockGeminiResponse {
-                print("🔧 MOCK MODE: Returning mock Gemini response")
-                responseText = mockResponseText
+
+            if useDynamicUIValue {
+                // Dynamic UI mode: Use non-streaming to get full response first, then parse
+                print("🌐 Using non-streaming request for Dynamic UI (need to parse JSON first)...")
+                responseText = try await geminiClient.sendRequest(history: conversationManager.getHistory())
+
+                print("🌐 Received complete response from Gemini!")
+                print("✅ Got response text: \(responseText.prefix(100))...")
+
+                // Parse immediately to extract text and UI schema
+                let parsed = dynamicUIResponseParser.parse(response: responseText)
+
+                // Update UI schema first (so it's ready when we display)
                 await MainActor.run {
-                    self.liveGeminiResponse = mockResponseText
+                    if let schema = parsed.schema {
+                        self.dynamicUISchema = schema
+                        print("✅ Dynamic UI schema parsed with \(schema.components.count) components")
+                    } else {
+                        self.dynamicUISchema = nil
+                        print("⚠️ No UI schema found in response")
+                    }
+                    self.markActivity()
+                }
+
+                // Now display only the human-readable text (not the raw JSON)
+                let displayText = parsed.text.isEmpty ? responseText : parsed.text
+                await MainActor.run {
+                    self.liveGeminiResponse = displayText
                 }
             } else {
+                // Standard mode: Use streaming for real-time display
                 print("🌐 Calling geminiClient.sendStreamingRequest...")
                 responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
                     // Update live Gemini response in real-time
@@ -1086,10 +1073,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                         self?.markActivity()  // Mark activity when Gemini is responding
                     }
                 }
-            }
 
-            print("🌐 Received complete response from Gemini!")
-            print("✅ Got response text: \(responseText.prefix(100))...")
+                print("🌐 Received complete response from Gemini!")
+                print("✅ Got response text: \(responseText.prefix(100))...")
+            }
 
             // Clear live response now that we have the final version
             await MainActor.run {
@@ -1108,7 +1095,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 print("📤 Handling message extraction...")
                 await handleMessageExtraction(responseText: responseText)
             } else if useDynamicUIValue {
-                // Parse dynamic UI response
+                // Parse dynamic UI response (schema already parsed above, this handles chat message update)
                 print("🎨 Handling dynamic UI response...")
                 await handleDynamicUIResponse(responseText: responseText)
             } else {
@@ -1194,20 +1181,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self.liveGeminiResponse = ""
             }
 
-            let responseText: String
-            if mockGeminiResponse {
-                print("🔧 MOCK MODE: Returning mock Gemini response")
-                responseText = mockResponseText
-                await MainActor.run {
-                    self.liveGeminiResponse = mockResponseText
-                }
-            } else {
-                responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
-                    // Update live Gemini response in real-time
-                    Task { @MainActor in
-                        self?.liveGeminiResponse = partialText
-                        self?.markActivity()  // Mark activity when Gemini is responding
-                    }
+            let responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
+                // Update live Gemini response in real-time
+                Task { @MainActor in
+                    self?.liveGeminiResponse = partialText
+                    self?.markActivity()  // Mark activity when Gemini is responding
                 }
             }
 
@@ -1514,19 +1492,16 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
     }
 
-    /// Handles responses from the dynamic UI system - parses both text and UI schema
+    /// Handles responses from the dynamic UI system - updates chat messages with display text
+    /// Note: Schema is already parsed in sendToGemini before this is called
     private func handleDynamicUIResponse(responseText: String) async {
         print("🎨 handleDynamicUIResponse called")
-        print("🎨 Response length: \(responseText.count) chars")
-        print("🎨 Response preview: \(String(responseText.prefix(500)))...")
-        print("🎨 Contains ui-schema marker: \(responseText.contains("```ui-schema"))")
 
-        // Parse the response to extract text and UI schema
+        // Parse to extract just the display text (schema already set in sendToGemini)
         let parsed = dynamicUIResponseParser.parse(response: responseText)
         let displayText = parsed.text.isEmpty ? responseText : parsed.text
 
-        print("🎨 Parsed text length: \(parsed.text.count)")
-        print("🎨 Schema parsed: \(parsed.schema != nil)")
+        print("🎨 Display text length: \(displayText.count)")
 
         await MainActor.run {
             self.geminiResponse = displayText
@@ -1536,17 +1511,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
                 self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: displayText, timestamp: Date())
             } else {
-                // Fallback: add new message if loading bubble not found
+                // Add new message
                 self.chatMessages.append(ChatMessage(role: .assistant, content: displayText, timestamp: Date()))
-            }
-
-            // Store the dynamic UI schema if parsed successfully
-            if let schema = parsed.schema {
-                self.dynamicUISchema = schema
-                print("✅ Dynamic UI schema parsed successfully with \(schema.components.count) components")
-            } else {
-                print("⚠️ No UI schema found in response, using text-only display")
-                self.dynamicUISchema = nil
             }
         }
 

@@ -69,9 +69,15 @@ def main():
     eyes_closed_counter = 0
     long_blink_triggered = False
 
-    # Fixed tracking ranges (based on measured values)
-    nose_x_min, nose_x_max = 0.5174, 0.5967
-    nose_y_min, nose_y_max = 0.3542, 0.3910
+    # Dynamic tracking ranges - auto-calibrate from observed nose positions
+    # Start with reasonable defaults, then expand based on actual observed range
+    nose_x_min, nose_x_max = 0.45, 0.55  # Start narrow, will expand
+    nose_y_min, nose_y_max = 0.30, 0.45  # Start narrow, will expand
+
+    # Calibration expansion factor - how much buffer to add around observed range
+    calibration_buffer = 0.02
+    calibration_samples = 0  # Count frames for initial calibration
+    CALIBRATION_FRAMES = 60  # ~2 seconds at 30fps
 
     print(json.dumps({"status": "calibrated"}), flush=True)
 
@@ -124,25 +130,38 @@ def main():
                 if frame_debug_counter % 30 == 0:  # Every 1 second at 30fps
                     print(f"👁️ LEFT_EAR: {left_ear:.3f}, RIGHT_EAR: {right_ear:.3f} (thresh: {EYE_AR_THRESH}, closed_count: {eyes_closed_counter})", file=sys.stderr, flush=True)
 
-                # Detect eye close: trigger when at least one eye is closed
+                # Detect eye close states
                 left_closed = left_ear < EYE_AR_THRESH
                 right_closed = right_ear < EYE_AR_THRESH
 
-                # Trigger if at least one eye is closed (wink or partial blink)
-                is_winking = left_closed or right_closed
+                # WINK DETECTION: Only trigger when exactly ONE eye is closed (not both)
+                # This prevents normal blinks (both eyes) from triggering the overlay
+                is_winking = (left_closed and not right_closed) or (right_closed and not left_closed)
+
+                # Track if both eyes are closed (normal blink - ignore for trigger)
+                both_closed = left_closed and right_closed
 
                 if is_winking:
                     eyes_closed_counter += 1
                     blink_counter += 1
 
-                    # Trigger on sustained wink (3 consecutive frames)
+                    # Trigger on sustained wink (8 consecutive frames)
                     if eyes_closed_counter == LONG_BLINK_THRESH and not long_blink_triggered:
                         long_blink_triggered = True
                         which_eye = "LEFT" if left_closed else "RIGHT"
                         print(f"😉 {which_eye} WINK TRIGGERED! (L:{left_ear:.3f} R:{right_ear:.3f})", file=sys.stderr, flush=True)
                         # Send blink event for screenshot using binary protocol
                         send_binary_blink(ema_x, ema_y)
+                elif both_closed:
+                    # Both eyes closed = normal blink, don't count toward wink trigger
+                    # but do track for skipping gaze updates during blink
+                    blink_counter += 1
+                    if blink_counter >= EYE_AR_CONSEC_FRAMES:
+                        is_blinking = True
+                    # Reset wink counter since this is not a wink
+                    eyes_closed_counter = 0
                 else:
+                    # Both eyes open - reset all counters
                     if blink_counter >= EYE_AR_CONSEC_FRAMES:
                         is_blinking = True
                     blink_counter = 0
@@ -165,6 +184,35 @@ def main():
                 # Responsive smoothing (reduced from 0.10 for lower latency)
                 ema_nose_x += (nose_x - ema_nose_x) * 0.25
                 ema_nose_y += (nose_y - ema_nose_y) * 0.25
+
+                # Dynamic calibration: expand tracking range based on observed positions
+                # This replaces hardcoded values with adaptive ranges
+                if calibration_samples < CALIBRATION_FRAMES:
+                    # During calibration, expand range to encompass observed positions
+                    if ema_nose_x < nose_x_min:
+                        nose_x_min = ema_nose_x - calibration_buffer
+                    if ema_nose_x > nose_x_max:
+                        nose_x_max = ema_nose_x + calibration_buffer
+                    if ema_nose_y < nose_y_min:
+                        nose_y_min = ema_nose_y - calibration_buffer
+                    if ema_nose_y > nose_y_max:
+                        nose_y_max = ema_nose_y + calibration_buffer
+                    calibration_samples += 1
+
+                    if calibration_samples == CALIBRATION_FRAMES:
+                        print(f"✅ Calibration complete: X=[{nose_x_min:.4f}, {nose_x_max:.4f}], Y=[{nose_y_min:.4f}, {nose_y_max:.4f}]", file=sys.stderr, flush=True)
+                else:
+                    # Post-calibration: slowly adapt to drift (very slow expansion only)
+                    # This handles gradual user position changes without breaking tracking
+                    slow_expand = 0.001
+                    if ema_nose_x < nose_x_min:
+                        nose_x_min -= slow_expand
+                    if ema_nose_x > nose_x_max:
+                        nose_x_max += slow_expand
+                    if ema_nose_y < nose_y_min:
+                        nose_y_min -= slow_expand
+                    if ema_nose_y > nose_y_max:
+                        nose_y_max += slow_expand
 
                 h_norm = (ema_nose_x - nose_x_min) / (nose_x_max - nose_x_min)
                 v_norm = (ema_nose_y - nose_y_min) / (nose_y_max - nose_y_min)

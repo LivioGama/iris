@@ -195,21 +195,12 @@ public class RustGazeTracker {
 
     private func pollFrame() {
         pollCount += 1
-        if pollCount <= 5 || pollCount % 100 == 0 {
-            logToFile("🦀 pollFrame() call #\(pollCount)")
-        }
-
         guard let tracker = tracker else {
-            logToFile("🦀 pollFrame: tracker is nil!")
             return
         }
 
         // Get next frame result from Rust
         let result = iris_gaze_get_frame(tracker)
-
-        if pollCount <= 5 {
-            logToFile("🦀 pollFrame: result.valid=\(result.valid), type=\(result.event_type), x=\(result.x), y=\(result.y)")
-        }
 
         guard result.valid else { return }
 

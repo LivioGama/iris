@@ -35,6 +35,10 @@ public class GazeEstimator: ObservableObject {
     @MainActor @Published public var calibrationCorner: CalibrationCorner = .none
     @MainActor @Published public var detectedElement: DetectedElement?
 
+    /// When true, the gaze indicator snaps to the center of detected accessibility elements
+    /// instead of following the raw gaze position freely
+    @MainActor @Published public var snapIndicatorToElement: Bool = false
+
     public var dominantEye: DominantEye = .left
     public var isTrackingEnabled: Bool = true
     public var currentScreen: NSScreen? = nil // Track which screen user is looking at

@@ -15,6 +15,7 @@ struct IRISFuturisticGazeIndicator: View {
     let detectedElement: DetectedElement?
     let config: GazeIndicatorConfig
     let screen: NSScreen
+    let snapToElement: Bool
 
     @State private var awarenessIntensity: Double = 0.3
     @State private var consciousnessPulse: Double = 1.0
@@ -22,7 +23,23 @@ struct IRISFuturisticGazeIndicator: View {
 
     private let indicatorSize: CGFloat = 160
 
+    /// Computes the display position - snaps to element center if enabled and element exists
+    private var snappedPosition: CGPoint? {
+        guard snapToElement,
+              let element = detectedElement,
+              let localBounds = convertToLocalCoordinates(element.bounds),
+              localBounds.width > 0,
+              localBounds.height > 0 else {
+            return nil
+        }
+
+        // Snap to center of the detected element
+        return CGPoint(x: localBounds.midX, y: localBounds.midY)
+    }
+
     var body: some View {
+        let effectivePosition = snappedPosition ?? gazePoint
+
         ZStack {
             // Element rectangle highlight (when detected) - absolute positioning
             // Only show if the element is on THIS screen
@@ -34,7 +51,7 @@ struct IRISFuturisticGazeIndicator: View {
                     .allowsHitTesting(false)
             }
 
-            // Gaze indicators - positioned at gaze point
+            // Gaze indicators - positioned at gaze point or snapped to element center
             ZStack {
                 // Main consciousness field
                 consciousnessField
@@ -45,7 +62,9 @@ struct IRISFuturisticGazeIndicator: View {
                     .opacity(detectedElement != nil ? 1.0 : 0.3)
                     .transition(.scale.combined(with: .opacity))
             }
-            .position(gazePoint)
+            .position(effectivePosition)
+            // Smooth animation only when snapping is enabled - jumps between elements
+            .animation(snapToElement ? .spring(response: 0.25, dampingFraction: 0.8) : nil, value: detectedElement?.bounds)
         }
         .onAppear {
             startConsciousnessCycle()

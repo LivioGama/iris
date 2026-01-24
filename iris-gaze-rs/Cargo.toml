@@ -32,6 +32,9 @@ libc = "0.2"
 # Image processing
 image = "0.25"
 
+# JSON parsing for Python communication
+serde_json = "1.0"
+
 [features]
 default = []
 mediapipe = []

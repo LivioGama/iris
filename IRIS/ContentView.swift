@@ -136,7 +136,8 @@ struct OverlayView: View {
                     gazePoint: displayPoint,
                     detectedElement: coordinator.gazeEstimator.detectedElement,
                     config: modeConfig.gazeIndicatorStyle,
-                    screen: screen
+                    screen: screen,
+                    snapToElement: kSnapIndicatorToElement
                 )
                 .allowsHitTesting(false)
             }

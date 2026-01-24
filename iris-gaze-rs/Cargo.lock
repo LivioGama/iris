@@ -713,6 +713,7 @@ dependencies = [
  "opencv",
  "ort",
  "parking_lot",
+ "serde_json",
 ]
 
 [[package]]
