@@ -277,9 +277,15 @@ class PassThroughWindow: NSWindow {
     private func updateMouseEventHandling() {
         guard let coordinator = coordinator else { return }
 
-        // ALWAYS pass through mouse events - let SwiftUI views decide what to block
-        // The overlay views themselves have .allowsHitTesting(false) on them
-        self.ignoresMouseEvents = true
+        // Only block mouse events when Gemini overlay has interactive content
+        // The overlay needs to receive clicks for the close button
+        let gemini = coordinator.geminiService
+        let overlayActive = gemini.isListening || gemini.isProcessing ||
+                           !gemini.chatMessages.isEmpty || gemini.capturedScreenshot != nil
+
+        // When overlay is active, allow mouse events so close button works
+        // When inactive, pass through all mouse events to underlying apps
+        self.ignoresMouseEvents = !overlayActive
     }
 
     deinit {

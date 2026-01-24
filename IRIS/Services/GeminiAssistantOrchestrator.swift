@@ -14,6 +14,10 @@ private let icoiPromptBuilder = ICOIPromptBuilder()
 private let icoiResponseParser = ICOIResponseParser()
 private let clipboardService = ClipboardActionService()
 
+// MARK: - Dynamic UI Services
+private let dynamicUIPromptBuilder = DynamicUIPromptBuilder()
+private let dynamicUIResponseParser = DynamicUIResponseParser()
+
 /// High-level orchestrator for Gemini assistant interactions
 /// Responsibility: Workflow coordination ONLY - delegates to specialized services
 public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceCommandDelegate {
@@ -49,6 +53,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var parsedICOIResponse: ICOIParsedResponse?
     @Published public var currentIntent: ICOIIntent = .general // Current classified intent for UI layout
     @Published public var shouldAutoClose: Bool = false // Trigger for slide-up animation
+
+    // MARK: - Dynamic UI Properties
+    @Published public var dynamicUISchema: DynamicUISchema? = nil // AI-generated UI schema
+    @Published public var useDynamicUI: Bool = true // Toggle between dynamic UI and classic ICOI modes
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -453,6 +461,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.liveTranscription = ""
             self.capturedScreenshot = nil
             self.parsedICOIResponse = nil
+            self.dynamicUISchema = nil  // Clear dynamic UI schema
             self.isProcessing = false
             self.isListening = false
             self.isListeningForBuffers = false
@@ -624,9 +633,14 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         // Use the already-classified intent (from transcription completion) and build specialized ICOI prompt
         let currentIntentValue = await MainActor.run { self.currentIntent }
+        let useDynamicUIValue = await MainActor.run { self.useDynamicUI }
         let fullPrompt: String
 
-        if currentIntentValue != .general {
+        if useDynamicUIValue {
+            // Use dynamic UI system - AI generates custom UI schema
+            print("🎨 Using Dynamic UI system")
+            fullPrompt = dynamicUIPromptBuilder.buildSystemPrompt() + "\n\n" + dynamicUIPromptBuilder.buildUserPrompt(userRequest: actualPrompt)
+        } else if currentIntentValue != .general {
             print("🎯 Using ICOI intent: \(currentIntentValue.rawValue)")
             fullPrompt = icoiPromptBuilder.buildPrompt(for: currentIntentValue, userRequest: actualPrompt, focusedElement: focusedElement)
         } else {
@@ -691,6 +705,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             if waitingForMessageExtraction {
                 print("📤 Handling message extraction...")
                 await handleMessageExtraction(responseText: responseText)
+            } else if useDynamicUIValue {
+                // Parse dynamic UI response
+                print("🎨 Handling dynamic UI response...")
+                await handleDynamicUIResponse(responseText: responseText)
             } else {
                 print("💬 Handling normal response...")
                 let currentIntentValue = await MainActor.run { self.currentIntent }
@@ -1083,6 +1101,48 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             startListeningForFollowup()
         }
+    }
+
+    /// Handles responses from the dynamic UI system - parses both text and UI schema
+    private func handleDynamicUIResponse(responseText: String) async {
+        print("🎨 handleDynamicUIResponse called")
+        print("🎨 Response length: \(responseText.count) chars")
+        print("🎨 Response preview: \(String(responseText.prefix(500)))...")
+        print("🎨 Contains ui-schema marker: \(responseText.contains("```ui-schema"))")
+
+        // Parse the response to extract text and UI schema
+        let parsed = dynamicUIResponseParser.parse(response: responseText)
+        let displayText = parsed.text.isEmpty ? responseText : parsed.text
+
+        print("🎨 Parsed text length: \(parsed.text.count)")
+        print("🎨 Schema parsed: \(parsed.schema != nil)")
+
+        await MainActor.run {
+            self.geminiResponse = displayText
+            self.isProcessing = false
+
+            // Replace the assistant loading bubble with actual response
+            if let lastIndex = self.chatMessages.lastIndex(where: { $0.role == .assistant && $0.content == "..." }) {
+                self.chatMessages[lastIndex] = ChatMessage(role: .assistant, content: displayText, timestamp: Date())
+            } else {
+                // Fallback: add new message if loading bubble not found
+                self.chatMessages.append(ChatMessage(role: .assistant, content: displayText, timestamp: Date()))
+            }
+
+            // Store the dynamic UI schema if parsed successfully
+            if let schema = parsed.schema {
+                self.dynamicUISchema = schema
+                print("✅ Dynamic UI schema parsed successfully with \(schema.components.count) components")
+            } else {
+                print("⚠️ No UI schema found in response, using text-only display")
+                self.dynamicUISchema = nil
+            }
+        }
+
+        // Don't auto-close for dynamic UI - let user interact with the generated interface
+        print("⏰ Auto-close timer skipped for dynamic UI (user needs time to interact)")
+
+        startListeningForFollowup()
     }
 
     private func handleNormalResponse(responseText: String, intentClassification: IntentClassification) async {
