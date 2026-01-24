@@ -124,14 +124,12 @@ def main():
                 if frame_debug_counter % 30 == 0:  # Every 1 second at 30fps
                     print(f"👁️ LEFT_EAR: {left_ear:.3f}, RIGHT_EAR: {right_ear:.3f} (thresh: {EYE_AR_THRESH}, closed_count: {eyes_closed_counter})", file=sys.stderr, flush=True)
 
-                # Detect WINK: one eye closed, other eye open
-                # Left eye closed, right eye open = left wink
-                # Right eye closed, left eye open = right wink
+                # Detect eye close: trigger when at least one eye is closed
                 left_closed = left_ear < EYE_AR_THRESH
                 right_closed = right_ear < EYE_AR_THRESH
 
-                # Only trigger if exactly ONE eye is closed (wink, not blink)
-                is_winking = (left_closed and not right_closed) or (right_closed and not left_closed)
+                # Trigger if at least one eye is closed (wink or partial blink)
+                is_winking = left_closed or right_closed
 
                 if is_winking:
                     eyes_closed_counter += 1

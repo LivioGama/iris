@@ -28,6 +28,8 @@ fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=src/types.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
+    println!("cargo:rerun-if-changed=mediapipe/mediapipe_bridge.cc");
+    println!("cargo:rerun-if-changed=mediapipe/mediapipe_bridge.h");
 
     // Optional MediaPipe C++ bridge (feature-gated)
     if env::var("CARGO_FEATURE_MEDIAPIPE").is_ok() {

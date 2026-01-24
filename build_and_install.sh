@@ -19,7 +19,21 @@ sleep 1
 echo "🦀 Building Rust gaze library..."
 if [ -d "iris-gaze-rs" ]; then
     cd iris-gaze-rs
-    cargo build --release --target aarch64-apple-darwin 2>&1 | tail -10
+    FEATURES=""
+    if [ "$USE_MEDIAPIPE" = "1" ]; then
+        echo "🔧 Building with MediaPipe feature..."
+        if [ -z "$MEDIAPIPE_DIR" ]; then
+            echo "❌ MEDIAPIPE_DIR is required when USE_MEDIAPIPE=1"
+            exit 1
+        fi
+        if [ -z "$MEDIAPIPE_LINK_LIBS" ]; then
+            echo "❌ MEDIAPIPE_LINK_LIBS is required when USE_MEDIAPIPE=1"
+            exit 1
+        fi
+        FEATURES="--features mediapipe"
+    fi
+
+    cargo build --release --target aarch64-apple-darwin $FEATURES 2>&1 | tail -10
 
     # Copy static library to libs directory
     mkdir -p ../libs

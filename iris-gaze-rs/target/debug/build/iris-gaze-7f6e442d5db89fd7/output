@@ -1,6 +1,8 @@
 cargo:rerun-if-changed=src/lib.rs
 cargo:rerun-if-changed=src/types.rs
 cargo:rerun-if-changed=cbindgen.toml
+cargo:rerun-if-changed=mediapipe/mediapipe_bridge.cc
+cargo:rerun-if-changed=mediapipe/mediapipe_bridge.h
 cargo:rustc-link-lib=framework=AVFoundation
 cargo:rustc-link-lib=framework=CoreMedia
 cargo:rustc-link-lib=framework=CoreVideo
