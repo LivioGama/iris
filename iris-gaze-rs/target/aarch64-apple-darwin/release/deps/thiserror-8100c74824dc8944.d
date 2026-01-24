@@ -1,0 +1,14 @@
+/Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/deps/thiserror-8100c74824dc8944.d: /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/build/thiserror-89eae007ca53e33e/out/private.rs
+
+/Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/deps/libthiserror-8100c74824dc8944.rlib: /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/build/thiserror-89eae007ca53e33e/out/private.rs
+
+/Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/deps/libthiserror-8100c74824dc8944.rmeta: /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/build/thiserror-89eae007ca53e33e/out/private.rs
+
+/Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs:
+/Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs:
+/Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs:
+/Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs:
+/Users/livio/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs:
+/Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/build/thiserror-89eae007ca53e33e/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/livio/Documents/iris/iris-gaze-rs/target/aarch64-apple-darwin/release/build/thiserror-89eae007ca53e33e/out

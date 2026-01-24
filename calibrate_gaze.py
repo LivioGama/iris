@@ -8,6 +8,9 @@ import mediapipe as mp
 import json
 import sys
 import time
+import os
+
+os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
 mp_face_mesh = mp.solutions.face_mesh
 
@@ -20,7 +23,13 @@ def calibrate():
     print("\nStarting in 3 seconds...")
     time.sleep(3)
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
+    if not cap.isOpened():
+        print("\nERROR: Could not open camera!")
+        print("Please ensure no other application (like the IRIS app) is using the camera.")
+        print("Try running: pkill IRIS")
+        sys.exit(1)
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 

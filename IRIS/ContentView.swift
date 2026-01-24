@@ -31,28 +31,85 @@ struct OverlayView: View {
 
     /// Adjust gaze point for display on each screen
     private func adjustedGazePoint(_ globalPoint: CGPoint) -> CGPoint {
-        // Python is calibrated for 3840×1600 (the large external screen)
-        // Identify screens by SIZE, not by NSScreen.main
+        // Gaze is calibrated in the largest screen's coordinate space.
+        // Scale to the current screen, then apply optional offsets for the calibration screen.
+        let calibrationScreen = NSScreen.screens.max(by: { $0.frame.width < $1.frame.width }) ?? screen
+        let calibrationSize = calibrationScreen.frame.size
 
-        let isExternalScreen = screen.frame.width == 3840 && screen.frame.height == 1600
-        let isMacBookScreen = screen.frame.width == 1800 && screen.frame.height == 1169
+        var adjusted = globalPoint
 
-        if isExternalScreen {
-            // EXTERNAL screen 3840×1600 - Vertical offset to compensate for screen above camera
-            // Shift indicator down from where you're looking
-            return CGPoint(x: globalPoint.x, y: globalPoint.y + 700)
-        } else if isMacBookScreen {
-            // MacBook screen 1800×1169 - scale DOWN from 3840×1600
-            let scaleX = 1800.0 / 3840.0  // 0.469
-            let scaleY = 1169.0 / 1600.0  // 0.731
-            return CGPoint(
-                x: globalPoint.x * scaleX,
-                y: globalPoint.y * scaleY
-            )
-        } else {
-            // Unknown screen - use raw coords
-            return globalPoint
+        if screen.frame.size != calibrationSize {
+            let scaleX = screen.frame.width / calibrationSize.width
+            let scaleY = screen.frame.height / calibrationSize.height
+            adjusted = CGPoint(x: globalPoint.x * scaleX, y: globalPoint.y * scaleY)
         }
+
+        if screen === calibrationScreen {
+            let tuning = Self.externalTuning()
+            adjusted.x += tuning.xOffset
+            adjusted.y += tuning.yOffset
+
+            // Apply optional per-axis gain around screen center (for external display only).
+            let centerX = calibrationSize.width * 0.5
+            let centerY = calibrationSize.height * 0.5
+            adjusted.x = centerX + (adjusted.x - centerX) * tuning.xGain
+            adjusted.y = centerY + (adjusted.y - centerY) * tuning.yGain
+        }
+
+        return adjusted
+    }
+
+    private struct ExternalTuning {
+        var xOffset: CGFloat
+        var yOffset: CGFloat
+        var xGain: CGFloat
+        var yGain: CGFloat
+    }
+
+    private static var tuningLastRead: Date = .distantPast
+    private static var cachedTuning = ExternalTuning(xOffset: 0, yOffset: 700, xGain: 1.0, yGain: 1.0)
+
+    private static func externalTuning() -> ExternalTuning {
+        let now = Date()
+        if now.timeIntervalSince(tuningLastRead) < 1.0 {
+            return cachedTuning
+        }
+        tuningLastRead = now
+
+        let path = "/tmp/iris_offsets.txt"
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return cachedTuning
+        }
+
+        var x = cachedTuning.xOffset
+        var y = cachedTuning.yOffset
+        var xGain = cachedTuning.xGain
+        var yGain = cachedTuning.yGain
+
+        for rawLine in content.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            let parts = line.split(separator: "=", maxSplits: 1)
+            if parts.count != 2 { continue }
+            let key = parts[0].trimmingCharacters(in: .whitespaces)
+            let valueStr = parts[1].trimmingCharacters(in: .whitespaces)
+            guard let value = Double(valueStr) else { continue }
+            switch key {
+            case "external_x_offset":
+                x = CGFloat(value)
+            case "external_y_offset":
+                y = CGFloat(value)
+            case "external_x_gain":
+                xGain = CGFloat(value)
+            case "external_y_gain":
+                yGain = CGFloat(value)
+            default:
+                break
+            }
+        }
+
+        cachedTuning = ExternalTuning(xOffset: x, yOffset: y, xGain: xGain, yGain: yGain)
+        return cachedTuning
     }
 
     var body: some View {

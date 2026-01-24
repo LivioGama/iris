@@ -1,0 +1,49 @@
+[package]
+name = "iris-gaze"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance eye tracking library for IRIS"
+license = "MIT"
+
+[lib]
+name = "iris_gaze"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+# Camera capture using OpenCV (more reliable on macOS than nokhwa)
+opencv = { version = "0.93", default-features = false, features = ["videoio", "imgproc", "objdetect", "dnn", "face", "clang-runtime"] }
+
+# ONNX inference for face detection
+ort = { version = "2.0.0-rc.9", default-features = true }
+
+# Array operations for tensor manipulation
+ndarray = "0.16"
+
+# Fast synchronization primitives
+parking_lot = "0.12"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# For C string handling in FFI
+libc = "0.2"
+
+# Image processing
+image = "0.25"
+
+[features]
+default = []
+
+[build-dependencies]
+cbindgen = "0.27"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+[[bin]]
+name = "test_onnx"
+path = "src/test_onnx.rs"

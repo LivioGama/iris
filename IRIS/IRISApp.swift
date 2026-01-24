@@ -220,7 +220,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 coordinator: coordinator
             )
 
-            window.level = .statusBar  // Always on top, above all other windows
+            window.level = .screenSaver  // Always on top, above all other windows (all screens)
             window.isOpaque = false
             window.backgroundColor = .clear
             // Mouse event handling is now managed by PassThroughWindow based on demo mode

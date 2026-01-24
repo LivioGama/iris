@@ -32,15 +32,39 @@ let package = Package(
             path: "IRISVision/Sources"
         ),
 
-        // Gaze module: Gaze tracking, Python integration
+        // C bridge for Rust gaze library
+        .systemLibrary(
+            name: "CIrisGaze",
+            path: "IRISGaze/Sources/Bridge"
+        ),
+
+        // Gaze module: Gaze tracking, Rust integration
         .target(
             name: "IRISGaze",
             dependencies: [
                 "IRISCore",
                 "IRISVision",
+                "CIrisGaze",
                 .product(name: "Atomics", package: "swift-atomics")
             ],
-            path: "IRISGaze/Sources"
+            path: "IRISGaze/Sources",
+            exclude: ["Bridge"],
+            linkerSettings: [
+                .unsafeFlags(["-L", "libs"]),
+                .linkedLibrary("iris_gaze"),
+                // Link OpenCV (required by Rust library)
+                .unsafeFlags(["-L", "/opt/homebrew/opt/opencv/lib"]),
+                .linkedLibrary("opencv_core"),
+                .linkedLibrary("opencv_videoio"),
+                .linkedLibrary("opencv_imgproc"),
+                .linkedLibrary("opencv_objdetect"),
+                .linkedLibrary("opencv_dnn"),
+                .linkedLibrary("opencv_face"),
+                .linkedFramework("Accelerate"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("CoreMedia"),
+                .linkedFramework("CoreVideo"),
+            ]
         ),
 
         // Network module: Gemini API, conversation management

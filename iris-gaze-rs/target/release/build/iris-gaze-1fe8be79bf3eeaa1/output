@@ -1,0 +1,7 @@
+cargo:rerun-if-changed=src/lib.rs
+cargo:rerun-if-changed=src/types.rs
+cargo:rerun-if-changed=cbindgen.toml
+cargo:rustc-link-lib=framework=AVFoundation
+cargo:rustc-link-lib=framework=CoreMedia
+cargo:rustc-link-lib=framework=CoreVideo
+cargo:rustc-link-lib=framework=Foundation

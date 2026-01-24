@@ -1,4 +1,4 @@
-#!/Users/livio/Documents/iris2/gaze_env/bin/python3
+#!/Users/livio/Documents/iris/gaze_env/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

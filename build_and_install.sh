@@ -15,6 +15,27 @@ fi
 # Wait for processes to terminate
 sleep 1
 
+# Build Rust gaze library first
+echo "🦀 Building Rust gaze library..."
+if [ -d "iris-gaze-rs" ]; then
+    cd iris-gaze-rs
+    cargo build --release --target aarch64-apple-darwin 2>&1 | tail -10
+
+    # Copy static library to libs directory
+    mkdir -p ../libs
+    cp target/aarch64-apple-darwin/release/libiris_gaze.a ../libs/
+
+    # Copy generated header to Swift bridge
+    if [ -f "include/iris_gaze.h" ]; then
+        cp include/iris_gaze.h ../IRISGaze/Sources/Bridge/
+    fi
+
+    cd ..
+    echo "✅ Rust library built successfully"
+else
+    echo "⚠️ Rust crate not found, skipping Rust build"
+fi
+
 # Build configuration
 echo "🔨 Building IRIS with Swift Package Manager (Debug)..."
 swift build -c debug

@@ -4,6 +4,7 @@ import Combine
 import Atomics
 import IRISCore
 import IRISVision
+import CIrisGaze
 
 extension String {
     func appendLine(to path: String) throws {
@@ -53,7 +54,15 @@ public class GazeEstimator: ObservableObject {
     private let springStiffness: CGFloat = 0.55 // Increased from 0.35 for lower latency
     private let calibrationResolution = CGSize(width: 3840, height: 1600)
 
+    // Backend selection: true = Rust (faster), false = Python (fallback)
+    private let useRustBackend: Bool = true
+
+    // Python backend (legacy)
     private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
+
+    // Rust backend (new, faster)
+    private let rustTracker = RustGazeTracker()
+
     private var timer: Timer?
 
     // Adaptive Frame Rate System
@@ -143,15 +152,62 @@ public class GazeEstimator: ObservableObject {
             targetYBits.store(UInt64(Double(center.y).bitPattern), ordering: .relaxed)
             displayPoint = center
         }
-        setupProcessManager()
+
+        if useRustBackend {
+            setupRustTracker()
+        } else {
+            setupProcessManager()
+        }
+
         Task { @MainActor in
             self.startAnimationTimer()
         }
     }
 
+    private func setupRustTracker() {
+        rustTracker.onGaze = { [weak self] x, y in
+            guard let self = self else { return }
+            // Store to atomics (same as Python backend)
+            self.targetXBits.store(UInt64(x.bitPattern), ordering: .relaxed)
+            self.targetYBits.store(UInt64(y.bitPattern), ordering: .relaxed)
+        }
+
+        rustTracker.onBlink = { [weak self] x, y in
+            guard let self = self else { return }
+            let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            print("👁️ BLINK DETECTED (Rust) at (\(x), \(y))")
+            Task { @MainActor in
+                self.onBlinkDetected?(blinkPoint, self.detectedElement)
+            }
+        }
+
+        rustTracker.onStateChange = { [weak self] state in
+            Task { @MainActor in
+                switch state {
+                case .starting:
+                    self?.debugInfo = "Starting (Rust)..."
+                case .running:
+                    self?.debugInfo = "Ready (Rust)"
+                    self?.isTracking = true
+                    self?.calibrationCorner = .done
+                case .paused:
+                    self?.debugInfo = "Paused"
+                case .failed(let error):
+                    self?.debugInfo = "Error: \(error.localizedDescription)"
+                    self?.isTracking = false
+                case .idle:
+                    self?.debugInfo = "Stopped"
+                    self?.isTracking = false
+                }
+            }
+        }
+    }
+
     private func setupProcessManager() {
         processManager.onOutput = { [weak self] data in
-            self?.parseOutput(data)
+            Task { @MainActor in
+                self?.parseOutput(data)
+            }
         }
 
         processManager.onStateChange = { [weak self] state in
@@ -389,17 +445,6 @@ public class GazeEstimator: ObservableObject {
     public func start() {
         try? "🎯 GazeEstimator.start() called".appendLine(to: "/tmp/iris_startup.log")
 
-        guard !processManager.isRunning else {
-            try? "⚠️ Process manager already running".appendLine(to: "/tmp/iris_startup.log")
-            return
-        }
-
-        // Log environment info
-        let envInfo = IRISCore.PathResolver.getEnvironmentInfo()
-        for (key, value) in envInfo {
-            try? "\(key): \(value)".appendLine(to: "/tmp/iris_startup.log")
-        }
-
         // Use the largest screen resolution for calibration (usually the external monitor)
         // This ensures eye tracking covers the full range of all displays
         let largestScreen = NSScreen.screens.max(by: { $0.frame.width < $1.frame.width }) ?? NSScreen.main
@@ -409,22 +454,59 @@ public class GazeEstimator: ObservableObject {
 
         try? "📐 Screen: \(screenWidth)x\(screenHeight)".appendLine(to: "/tmp/iris_startup.log")
 
-        let arguments = [
-            "--eye", dominantEye.rawValue,
-            String(screenWidth),
-            String(screenHeight)
-        ]
+        if useRustBackend {
+            // Start Rust backend
+            guard !rustTracker.isRunning else {
+                try? "⚠️ Rust tracker already running".appendLine(to: "/tmp/iris_startup.log")
+                return
+            }
 
-        try? "🐍 Starting Python with args: \(arguments)".appendLine(to: "/tmp/iris_startup.log")
+            try? "🦀 Starting Rust backend".appendLine(to: "/tmp/iris_startup.log")
 
-        do {
-            try processManager.start(arguments: arguments)
-            try? "✅ Process manager started".appendLine(to: "/tmp/iris_startup.log")
-        } catch {
-            let errMsg = "❌ GazeEstimator failed: \(error.localizedDescription)"
-            try? errMsg.appendLine(to: "/tmp/iris_startup.log")
-            Task { @MainActor in
-                self.debugInfo = "Failed: \(error.localizedDescription)"
+            do {
+                try rustTracker.start(
+                    screenWidth: screenWidth,
+                    screenHeight: screenHeight,
+                    dominantEye: dominantEye.rawValue
+                )
+                try? "✅ Rust tracker started".appendLine(to: "/tmp/iris_startup.log")
+            } catch {
+                let errMsg = "❌ Rust tracker failed: \(error.localizedDescription)"
+                try? errMsg.appendLine(to: "/tmp/iris_startup.log")
+                Task { @MainActor in
+                    self.debugInfo = "Failed: \(error.localizedDescription)"
+                }
+            }
+        } else {
+            // Start Python backend (legacy)
+            guard !processManager.isRunning else {
+                try? "⚠️ Process manager already running".appendLine(to: "/tmp/iris_startup.log")
+                return
+            }
+
+            // Log environment info
+            let envInfo = IRISCore.PathResolver.getEnvironmentInfo()
+            for (key, value) in envInfo {
+                try? "\(key): \(value)".appendLine(to: "/tmp/iris_startup.log")
+            }
+
+            let arguments = [
+                "--eye", dominantEye.rawValue,
+                String(screenWidth),
+                String(screenHeight)
+            ]
+
+            try? "🐍 Starting Python with args: \(arguments)".appendLine(to: "/tmp/iris_startup.log")
+
+            do {
+                try processManager.start(arguments: arguments)
+                try? "✅ Process manager started".appendLine(to: "/tmp/iris_startup.log")
+            } catch {
+                let errMsg = "❌ GazeEstimator failed: \(error.localizedDescription)"
+                try? errMsg.appendLine(to: "/tmp/iris_startup.log")
+                Task { @MainActor in
+                    self.debugInfo = "Failed: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -519,7 +601,11 @@ public class GazeEstimator: ObservableObject {
     }
 
     public func stop() {
-        processManager.stop()
+        if useRustBackend {
+            rustTracker.stop()
+        } else {
+            processManager.stop()
+        }
         Task { @MainActor in
             self.isTracking = false
             self.debugInfo = "Stopped"
@@ -527,11 +613,19 @@ public class GazeEstimator: ObservableObject {
     }
 
     public func restart() {
-        processManager.restart()
+        if useRustBackend {
+            rustTracker.stop()
+            // Small delay before restarting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.start()
+            }
+        } else {
+            processManager.restart()
+        }
     }
 
     deinit {
-        timer?.invalidate()
-        processManager.stop()
+        // Note: Timer and tracker cleanup is handled by their own deinit methods
+        // We cannot access MainActor-isolated properties from deinit
     }
 }

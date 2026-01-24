@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV=/Users/livio/Documents/iris2/gaze_env
+VIRTUAL_ENV=/Users/livio/Documents/iris/gaze_env
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
