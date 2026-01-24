@@ -35,6 +35,8 @@ pub mod blink;
 pub mod camera;
 pub mod face_mesh;
 pub mod gaze;
+#[cfg(feature = "mediapipe")]
+pub mod mediapipe;
 pub mod types;
 
 use std::ffi::{c_char, CStr};

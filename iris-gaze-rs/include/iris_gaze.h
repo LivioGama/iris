@@ -130,6 +130,10 @@ typedef struct GazeResult {
   bool valid;
 } GazeResult;
 
+typedef struct MPFaceLandmarker {
+
+} MPFaceLandmarker;
+
 /**
  * Initialize a new gaze tracker
  *
@@ -240,5 +244,16 @@ void iris_gaze_set_calibration(struct GazeTracker *tracker,
  * When enabled, the tracker will automatically adjust calibration based on observed values
  */
  void iris_gaze_set_auto_calibrate(struct GazeTracker *tracker, bool enabled) ;
+
+extern struct MPFaceLandmarker *mp_face_landmarker_create(const char *model_path);
+
+extern void mp_face_landmarker_destroy(struct MPFaceLandmarker *landmarker);
+
+extern bool mp_face_landmarker_process(struct MPFaceLandmarker *landmarker,
+                                       const uint8_t *rgb_data,
+                                       int32_t width,
+                                       int32_t height,
+                                       float *out_landmarks,
+                                       int32_t out_len);
 
 #endif  /* IRIS_GAZE_H */

@@ -34,9 +34,11 @@ image = "0.25"
 
 [features]
 default = []
+mediapipe = []
 
 [build-dependencies]
 cbindgen = "0.27"
+cc = "1.0"
 
 [profile.release]
 opt-level = 3

@@ -3,6 +3,8 @@
 //! Uses OpenCV Haar cascade for face detection and ONNX model for 468-point landmarks.
 
 use crate::camera::Frame;
+#[cfg(feature = "mediapipe")]
+use crate::mediapipe::MediaPipeDetector;
 use crate::types::{FaceLandmarks, Point3D};
 use opencv::{
     core::{AlgorithmHint, Mat, Rect, Size, Vector, CV_8UC3},
@@ -45,6 +47,11 @@ pub struct FaceMeshDetector {
     onnx_session: Option<Session>,
     /// Whether ONNX model is available
     use_onnx: bool,
+    /// MediaPipe detector (optional, feature-gated)
+    #[cfg(feature = "mediapipe")]
+    mediapipe: Option<MediaPipeDetector>,
+    /// Whether MediaPipe is available
+    use_mediapipe: bool,
     /// Smoothed landmarks (468 points)
     smoothed_landmarks: Vec<Point3D>,
     /// Smoothing factor (EMA alpha)
@@ -119,6 +126,40 @@ impl FaceMeshDetector {
         let mut onnx_session = None;
         let mut use_onnx = false;
 
+        #[cfg(feature = "mediapipe")]
+        let mut mediapipe = None;
+        let mut use_mediapipe = false;
+
+        #[cfg(feature = "mediapipe")]
+        {
+            let mp_paths = [
+                "/Users/livio/Documents/iris/iris-gaze-rs/models/face_landmarker.task",
+                "models/face_landmarker.task",
+                "iris-gaze-rs/models/face_landmarker.task",
+            ];
+            for path in &mp_paths {
+                if Path::new(path).exists() {
+                    match MediaPipeDetector::new(path) {
+                        Ok(detector) => {
+                            log(
+                                &mut log_file,
+                                &format!("✅ MediaPipe FaceLandmarker loaded: {}", path),
+                            );
+                            mediapipe = Some(detector);
+                            use_mediapipe = true;
+                            break;
+                        }
+                        Err(e) => {
+                            log(
+                                &mut log_file,
+                                &format!("❌ MediaPipe FaceLandmarker failed: {} ({})", path, e),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         for model_path in &onnx_paths {
             log(
                 &mut log_file,
@@ -166,10 +207,17 @@ impl FaceMeshDetector {
             );
         }
 
+        if use_mediapipe {
+            log(&mut log_file, "🎯 Using MediaPipe C++ FaceLandmarker");
+        }
+
         Ok(Self {
             face_cascade,
             onnx_session,
             use_onnx,
+            #[cfg(feature = "mediapipe")]
+            mediapipe,
+            use_mediapipe,
             smoothed_landmarks: vec![Point3D::default(); 468],
             alpha: 0.35, // EMA smoothing factor
             frame_count: 0,
@@ -469,10 +517,27 @@ impl FaceMeshDetector {
                 .and_then(|mut f| {
                     writeln!(
                         f,
-                        "detect() frame #{}, {}x{}, use_onnx={}",
-                        self.frame_count, frame.width, frame.height, self.use_onnx
+                        "detect() frame #{}, {}x{}, mediapipe={}, use_onnx={}",
+                        self.frame_count,
+                        frame.width,
+                        frame.height,
+                        self.use_mediapipe,
+                        self.use_onnx
                     )
                 });
+        }
+
+        // If MediaPipe is available, prefer it for 1:1 behavior with Python.
+        #[cfg(feature = "mediapipe")]
+        if self.use_mediapipe {
+            if let Some(detector) = self.mediapipe.as_mut() {
+                if let Some(raw_landmarks) =
+                    detector.detect(&frame.data, frame.width as i32, frame.height as i32)
+                {
+                    self.smooth_landmarks(&raw_landmarks);
+                    return Ok(Some(self.to_face_landmarks(&self.smoothed_landmarks)));
+                }
+            }
         }
 
         // Convert frame to OpenCV Mat for face detection

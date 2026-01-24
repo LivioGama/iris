@@ -704,6 +704,7 @@ name = "iris-gaze"
 version = "0.1.0"
 dependencies = [
  "cbindgen",
+ "cc",
  "env_logger",
  "image",
  "libc",

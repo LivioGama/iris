@@ -14,8 +14,8 @@ fn main() {
     std::fs::create_dir_all(&out_dir).ok();
 
     // Generate C header using cbindgen
-    let config = cbindgen::Config::from_file("cbindgen.toml")
-        .expect("Failed to read cbindgen.toml");
+    let config =
+        cbindgen::Config::from_file("cbindgen.toml").expect("Failed to read cbindgen.toml");
 
     cbindgen::Builder::new()
         .with_crate(&crate_dir)
@@ -28,6 +28,37 @@ fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=src/types.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
+
+    // Optional MediaPipe C++ bridge (feature-gated)
+    if env::var("CARGO_FEATURE_MEDIAPIPE").is_ok() {
+        let mp_dir = env::var("MEDIAPIPE_DIR")
+            .expect("MEDIAPIPE_DIR must be set when building with --features mediapipe");
+        let mp_include = PathBuf::from(&mp_dir).join("include");
+        let mp_lib = PathBuf::from(&mp_dir).join("lib");
+
+        cc::Build::new()
+            .cpp(true)
+            .file("mediapipe/mediapipe_bridge.cc")
+            .include(mp_include)
+            .flag_if_supported("-std=c++17")
+            .define("MEDIAPIPE_AVAILABLE", None)
+            .compile("mediapipe_bridge");
+
+        println!("cargo:rustc-link-search=native={}", mp_lib.display());
+
+        if let Ok(libs) = env::var("MEDIAPIPE_LINK_LIBS") {
+            for lib in libs.split(',') {
+                let trimmed = lib.trim();
+                if !trimmed.is_empty() {
+                    println!("cargo:rustc-link-lib={}", trimmed);
+                }
+            }
+        } else {
+            println!(
+                "cargo:warning=MEDIAPIPE_LINK_LIBS not set; provide comma-separated libs to link"
+            );
+        }
+    }
 
     // Link against macOS frameworks needed for camera access
     println!("cargo:rustc-link-lib=framework=AVFoundation");
