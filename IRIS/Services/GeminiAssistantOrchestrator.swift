@@ -57,6 +57,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // MARK: - Dynamic UI Properties
     @Published public var dynamicUISchema: DynamicUISchema? = nil // AI-generated UI schema
     @Published public var useDynamicUI: Bool = true // Toggle between dynamic UI and classic ICOI modes
+    @Published public var demoAllTemplates: Bool = true // When true, cycles through all UI component templates for testing
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -88,8 +89,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private let blinkCooldownPeriod: TimeInterval = 5.0  // 5 seconds cooldown to prevent accidental re-opening
 
     // HARDCODED FLAG: Skip voice input and send this prompt directly
-    private let skipVoiceInput = true
-    private let hardcodedPrompt = "better implementation"
+    private let skipVoiceInput = false
+    private let hardcodedPrompt = ""
 
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility
@@ -593,6 +594,13 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         // Reset conversation state to close overlay
         resetConversationState()
+    }
+
+    // MARK: - Public Methods for Demo Mode
+
+    /// Public wrapper for sendToGemini - used by demo mode
+    public func sendToGeminiForDemo(screenshot: NSImage, prompt: String) async {
+        await sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: nil)
     }
 
     // MARK: - Private Methods

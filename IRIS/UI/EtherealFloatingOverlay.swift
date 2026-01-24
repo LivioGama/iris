@@ -10,6 +10,440 @@ import IRISCore
 import IRISNetwork
 import AppKit
 
+// MARK: - Demo Control Panel View (Separate Clickable Window)
+
+/// Standalone demo control panel with spatial liquid glass aesthetic
+struct DemoControlPanelView: View {
+    @EnvironmentObject var coordinator: IRISCoordinator
+    @State private var selectedIndex: Int = 0
+    @State private var customPrompt: String = "how can I improve this code?"
+    @State private var isSending: Bool = false
+    @State private var isHovering: Bool = false
+
+    private let demoSchemas = DynamicUIDemoGenerator.allDemoSchemas()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Floating title pill
+            titleSection
+                .padding(.bottom, 16)
+
+            // Gemini test card
+            geminiTestSection
+                .padding(.bottom, 12)
+
+            // Templates grid
+            templatesSection
+
+            Spacer(minLength: 12)
+
+            // Close button
+            closeButton
+        }
+        .padding(20)
+        .background(spatialGlassBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(glassStroke)
+        .shadow(color: Color.black.opacity(0.4), radius: 30, x: 0, y: 15)
+        .shadow(color: Color.cyan.opacity(0.1), radius: 20, x: 0, y: 5)
+    }
+
+    // MARK: - Spatial Glass Background
+
+    private var spatialGlassBackground: some View {
+        ZStack {
+            // Deep background with noise texture feel
+            Color.black.opacity(0.6)
+
+            // Frosted glass material
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.8)
+
+            // Gradient overlay for depth
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.08),
+                    Color.clear,
+                    Color.cyan.opacity(0.03),
+                    Color.purple.opacity(0.02)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Subtle inner glow
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.05),
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 300
+            )
+        }
+    }
+
+    private var glassStroke: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.3),
+                        Color.white.opacity(0.1),
+                        Color.white.opacity(0.05),
+                        Color.white.opacity(0.1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+    }
+
+    // MARK: - Subviews
+
+    private var titleSection: some View {
+        HStack(spacing: 8) {
+            // Animated dot
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.cyan, Color.cyan.opacity(0.5)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 4
+                    )
+                )
+                .frame(width: 8, height: 8)
+                .shadow(color: Color.cyan.opacity(0.6), radius: 4, x: 0, y: 0)
+
+            Text("DEMO MODE")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.9), Color.white.opacity(0.6)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .tracking(1.5)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.08))
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                )
+        )
+    }
+
+    private var geminiTestSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section header
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.cyan)
+                Text("TEST WITH GEMINI")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(.cyan.opacity(0.9))
+                    .tracking(0.5)
+            }
+
+            promptTextField
+            quickPromptButtons
+            sendButton
+        }
+        .padding(14)
+        .background(glassCard(tint: .cyan))
+    }
+
+    private var promptTextField: some View {
+        TextField("Enter prompt...", text: $customPrompt)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.black.opacity(0.3))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    )
+            )
+            .foregroundColor(.white)
+    }
+
+    private var quickPromptButtons: some View {
+        let prompts = ["improve code", "explain this", "find bugs", "better way"]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(prompts, id: \.self) { prompt in
+                    quickPromptButton(prompt)
+                }
+            }
+        }
+    }
+
+    private func quickPromptButton(_ prompt: String) -> some View {
+        let isSelected = customPrompt == prompt
+        return Button(action: { customPrompt = prompt }) {
+            Text(prompt)
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.08))
+                        .overlay(
+                            Capsule()
+                                .stroke(isSelected ? Color.cyan.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 0.5)
+                        )
+                )
+                .foregroundColor(isSelected ? .cyan : .white.opacity(0.7))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var sendButton: some View {
+        Button(action: { sendPromptToGemini() }) {
+            HStack(spacing: 8) {
+                if isSending {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(-45))
+                }
+                Text(isSending ? "Sending..." : "Send to Gemini")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(sendButtonBackground)
+            .foregroundColor(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isSending || customPrompt.isEmpty)
+        .opacity(customPrompt.isEmpty ? 0.5 : 1)
+    }
+
+    private var sendButtonBackground: some View {
+        ZStack {
+            // Base gradient
+            LinearGradient(
+                colors: isSending
+                    ? [Color.gray.opacity(0.3), Color.gray.opacity(0.2)]
+                    : [Color.cyan.opacity(0.4), Color.blue.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Shimmer overlay
+            if !isSending {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0),
+                        Color.white.opacity(0.15),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.5
+                )
+        )
+    }
+
+    private var templatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section header
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.purple)
+                Text("TEMPLATES")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(.purple.opacity(0.9))
+                    .tracking(0.5)
+            }
+
+            // Grid of template cards
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(Array(demoSchemas.enumerated()), id: \.offset) { index, schema in
+                    templateCard(index: index, schema: schema)
+                }
+            }
+        }
+        .padding(14)
+        .background(glassCard(tint: .purple))
+    }
+
+    private func templateCard(index: Int, schema: DynamicUISchema) -> some View {
+        let isSelected = selectedIndex == index && coordinator.geminiAssistant.isOverlayVisible
+        let accentColor = Color(hex: schema.theme.accentColor)
+
+        return Button(action: {
+            selectedIndex = index
+            coordinator.geminiAssistant.dynamicUISchema = schema
+            coordinator.geminiAssistant.isOverlayVisible = true
+        }) {
+            VStack(spacing: 6) {
+                // Icon with glow
+                Text(schema.theme.icon ?? "📄")
+                    .font(.system(size: 20))
+                    .shadow(color: isSelected ? accentColor.opacity(0.6) : Color.clear, radius: 8, x: 0, y: 0)
+
+                // Title
+                Text(schema.theme.title ?? "Template")
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? accentColor.opacity(0.2) : Color.white.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(
+                                isSelected ? accentColor.opacity(0.5) : Color.white.opacity(0.1),
+                                lineWidth: isSelected ? 1 : 0.5
+                            )
+                    )
+            )
+            .shadow(color: isSelected ? accentColor.opacity(0.3) : Color.clear, radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var closeButton: some View {
+        Button(action: {
+            coordinator.geminiAssistant.dynamicUISchema = nil
+            coordinator.geminiAssistant.isOverlayVisible = false
+            coordinator.geminiAssistant.resetConversationState()
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Close")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+            }
+            .foregroundColor(.white.opacity(0.6))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Helper Views
+
+    private func glassCard(tint: Color) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.03))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [tint.opacity(0.08), tint.opacity(0.02)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [tint.opacity(0.3), tint.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+    }
+
+    private func sendPromptToGemini() {
+        guard !customPrompt.isEmpty else { return }
+        isSending = true
+
+        Task {
+            // Capture screenshot using the screen capture service
+            let screenshot = await captureCurrentScreen()
+
+            guard let screenshot = screenshot else {
+                await MainActor.run {
+                    isSending = false
+                }
+                return
+            }
+
+            // Set the captured screenshot
+            await MainActor.run {
+                coordinator.geminiAssistant.capturedScreenshot = screenshot
+                coordinator.geminiAssistant.chatMessages.append(
+                    ChatMessage(role: .user, content: customPrompt, timestamp: Date())
+                )
+            }
+
+            // Send to Gemini
+            await coordinator.geminiAssistant.sendToGeminiForDemo(
+                screenshot: screenshot,
+                prompt: customPrompt
+            )
+
+            await MainActor.run {
+                isSending = false
+            }
+        }
+    }
+
+    private func captureCurrentScreen() async -> NSImage? {
+        guard let screen = NSScreen.main else { return nil }
+
+        // Use CGWindowListCreateImage to capture the screen
+        let screenRect = screen.frame
+        guard let cgImage = CGWindowListCreateImage(
+            screenRect,
+            .optionOnScreenOnly,
+            kCGNullWindowID,
+            .bestResolution
+        ) else { return nil }
+
+        return NSImage(cgImage: cgImage, size: screenRect.size)
+    }
+}
+
 // MARK: - Authentic Gemini Star Shape
 
 /// Custom shape that creates the authentic Gemini 4-pointed star
@@ -86,15 +520,16 @@ struct EtherealFloatingOverlay: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(false)  // Root container passes through clicks
+            .allowsHitTesting(false)
         }
-        .allowsHitTesting(false)  // GeometryReader passes through clicks
+        .allowsHitTesting(false)
     }
 
-    // CRITICAL: Same condition as working overlay
+    // CRITICAL: Same condition as working overlay - also check for demo mode with schema
     private var isOverlayActive: Bool {
         geminiService.isListening || geminiService.isProcessing ||
-        !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil
+        !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil ||
+        (geminiService.demoAllTemplates && geminiService.dynamicUISchema != nil)
     }
 
     // MARK: - Ethereal Content

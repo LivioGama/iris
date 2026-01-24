@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Using dependency injection via container
     let coordinator = DependencyContainer.shared.makeCoordinator()
     var overlayWindows: [NSWindow] = []
+    var demoControlWindow: NSWindow?
     private var screenTimer: Timer?
     private var mouseMonitor: Any?
     private var currentMouseScreen: NSScreen?
@@ -49,6 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             checkAndRequestAPIKey()
 
             setupOverlayWindows()
+            setupDemoControlWindow()
             setupMouseTracking()
             await coordinator.start()
             print("Auto-started tracking")
@@ -219,7 +221,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.level = .statusBar  // Always on top, above all other windows
             window.isOpaque = false
             window.backgroundColor = .clear
-            window.ignoresMouseEvents = true  // Pass through all clicks
+            // Mouse event handling is now managed by PassThroughWindow based on demo mode
             window.acceptsMouseMovedEvents = false
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             window.hasShadow = false
@@ -235,6 +237,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         print("Overlay windows created for \(overlayWindows.count) screen(s)")
+    }
+
+    private func setupDemoControlWindow() {
+        // Only create if demo mode is enabled
+        guard coordinator.geminiAssistant.demoAllTemplates else { return }
+
+        guard let mainScreen = NSScreen.main else { return }
+
+        let windowWidth: CGFloat = 280
+        let windowHeight: CGFloat = 620
+        let windowRect = NSRect(
+            x: 20,
+            y: mainScreen.frame.height - windowHeight - 80,
+            width: windowWidth,
+            height: windowHeight
+        )
+
+        let window = NSWindow(
+            contentRect: windowRect,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let demoView = DemoControlPanelView()
+            .environmentObject(coordinator)
+
+        window.contentView = NSHostingView(rootView: demoView)
+        window.makeKeyAndOrderFront(nil)
+
+        demoControlWindow = window
+        print("🎮 Demo control window created")
     }
 
     private func requestAllPermissions() async {
@@ -254,11 +294,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Custom window that passes through mouse events except for interactive UI elements
+/// Custom window that always passes through mouse events - overlay is purely visual
 class PassThroughWindow: NSWindow {
     weak var coordinator: IRISCoordinator?
 
-    // CRITICAL: Override to prevent focus stealing
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
@@ -266,17 +305,14 @@ class PassThroughWindow: NSWindow {
         self.coordinator = coordinator
         super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
 
-        // Ignore all mouse events - overlay is purely visual
+        // Always pass through - overlay is purely visual
         self.ignoresMouseEvents = true
     }
 }
 
 /// Custom hosting view that always passes through clicks
-/// The overlay is purely visual - no interactive elements
 class PassThroughHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // Always pass through to apps behind
-        // The overlay is purely visual with no interactive elements
         return nil
     }
 }

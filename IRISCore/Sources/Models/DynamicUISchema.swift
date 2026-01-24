@@ -764,3 +764,253 @@ public enum DynamicUIParseError: Error {
     case missingRequiredField(String)
     case invalidComponentType(String)
 }
+
+// MARK: - Demo Templates Generator
+
+/// Generates sample schemas showcasing all UI component types for testing/demo purposes
+public class DynamicUIDemoGenerator {
+    public init() {}
+
+    /// Returns an array of demo schemas, each showcasing different component types
+    public static func allDemoSchemas() -> [DynamicUISchema] {
+        return [
+            textComponentsDemo(),
+            listComponentsDemo(),
+            codeComponentsDemo(),
+            dataComponentsDemo(),
+            interactiveComponentsDemo(),
+            layoutComponentsDemo(),
+            specialComponentsDemo()
+        ]
+    }
+
+    /// Demo: Text components (heading, paragraph, label)
+    public static func textComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .md, maxWidth: 700, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#4796E3", secondaryColor: "#9177C7", background: .dark, mood: .friendly, icon: "📝", title: "Text Components"),
+            components: [
+                .heading(HeadingComponent(text: "Heading Level 1", level: 1, icon: "✨")),
+                .heading(HeadingComponent(text: "Heading Level 2", level: 2)),
+                .heading(HeadingComponent(text: "Heading Level 3", level: 3)),
+                .divider(DividerComponent(style: .gradient)),
+                .paragraph(ParagraphComponent(text: "This is a body paragraph with regular styling. It demonstrates how text flows naturally with proper line spacing.", style: .body)),
+                .paragraph(ParagraphComponent(text: "This is an emphasized paragraph for important information.", style: .emphasized)),
+                .paragraph(ParagraphComponent(text: "This is a caption - smaller and lighter text.", style: .caption)),
+                .paragraph(ParagraphComponent(text: "This text is muted for secondary information.", style: .muted)),
+                .paragraph(ParagraphComponent(text: "This text is highlighted with the accent color!", style: .highlight)),
+                .divider(DividerComponent(style: .line)),
+                .label(LabelComponent(text: "Label with icon", icon: "🏷️", color: nil)),
+                .label(LabelComponent(text: "Colored label", icon: "🎨", color: "#CA6673"))
+            ]
+        )
+    }
+
+    /// Demo: List components (bullet, numbered, checklist)
+    public static func listComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 700, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#9177C7", secondaryColor: "#CA6673", background: .darker, mood: .analytical, icon: "📋", title: "List Components"),
+            components: [
+                .heading(HeadingComponent(text: "Bullet Lists", level: 2, icon: "•")),
+                .bulletList(BulletListComponent(items: ["Dot style bullet point", "Another bullet item", "Third bullet item"], bulletStyle: .dot)),
+                .bulletList(BulletListComponent(items: ["Arrow style item", "Pointing to action"], bulletStyle: .arrow)),
+                .bulletList(BulletListComponent(items: ["Check style completed", "All done!"], bulletStyle: .check)),
+                .divider(DividerComponent(style: .dashed)),
+                .heading(HeadingComponent(text: "Numbered List", level: 2, icon: "🔢")),
+                .numberedList(NumberedListComponent(items: ["First step in the process", "Second step to complete", "Third and final step"], startFrom: 1)),
+                .divider(DividerComponent(style: .dashed)),
+                .heading(HeadingComponent(text: "Checklist", level: 2, icon: "✅")),
+                .checklist(ChecklistComponent(items: [
+                    ChecklistItem(text: "Completed task", checked: true, assignee: "Team A"),
+                    ChecklistItem(text: "In progress task", checked: false, assignee: "Team B"),
+                    ChecklistItem(text: "Pending review", checked: false, assignee: nil)
+                ]))
+            ]
+        )
+    }
+
+    /// Demo: Code components (codeBlock, codeComparison)
+    public static func codeComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 900, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#4796E3", secondaryColor: "#00D4AA", background: .darker, mood: .analytical, icon: "💻", title: "Code Components"),
+            components: [
+                .heading(HeadingComponent(text: "Code Block", level: 2, icon: "📦")),
+                .codeBlock(CodeBlockComponent(
+                    code: """
+                    func greet(name: String) -> String {
+                        return "Hello, \\(name)!"
+                    }
+
+                    let message = greet(name: "World")
+                    print(message)
+                    """,
+                    language: "swift",
+                    showLineNumbers: true,
+                    highlightLines: [2],
+                    copyable: true
+                )),
+                .divider(DividerComponent(style: .gradient)),
+                .heading(HeadingComponent(text: "Code Comparison", level: 2, icon: "🔄")),
+                .codeComparison(CodeComparisonComponent(
+                    beforeCode: """
+                    // Old implementation
+                    var result = ""
+                    for i in 0..<items.count {
+                        result += items[i]
+                        if i < items.count - 1 {
+                            result += ", "
+                        }
+                    }
+                    """,
+                    afterCode: """
+                    // New implementation
+                    let result = items.joined(separator: ", ")
+                    """,
+                    language: "swift",
+                    improvements: [
+                        "Reduced from 7 lines to 1 line",
+                        "Uses built-in joined() method",
+                        "More readable and maintainable",
+                        "Better performance with large arrays"
+                    ]
+                ))
+            ]
+        )
+    }
+
+    /// Demo: Data components (keyValue, progressBar, metrics)
+    public static func dataComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 800, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#00D4AA", secondaryColor: "#4796E3", background: .cool, mood: .analytical, icon: "📊", title: "Data Components"),
+            components: [
+                .heading(HeadingComponent(text: "Metrics Row", level: 2, icon: "📈")),
+                .metricsRow(MetricsRowComponent(metrics: [
+                    MetricComponent(label: "Performance", value: "98%", trend: .up, trendValue: "+5%", icon: "⚡"),
+                    MetricComponent(label: "Memory", value: "256MB", trend: .down, trendValue: "-12%", icon: "💾"),
+                    MetricComponent(label: "Latency", value: "45ms", trend: .neutral, trendValue: "±0", icon: "⏱️")
+                ])),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Progress Bars", level: 2, icon: "📉")),
+                .progressBar(ProgressBarComponent(value: 0.75, label: "Build Progress", showPercentage: true, color: "#4796E3")),
+                .progressBar(ProgressBarComponent(value: 0.45, label: "Tests Passing", showPercentage: true, color: "#00D4AA")),
+                .progressBar(ProgressBarComponent(value: 0.92, label: "Code Coverage", showPercentage: true, color: "#9177C7")),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Key-Value List", level: 2, icon: "🔑")),
+                .keyValueList(KeyValueListComponent(items: [
+                    KeyValueComponent(key: "Version", value: "2.1.0", icon: "📦", valueColor: nil),
+                    KeyValueComponent(key: "Status", value: "Active", icon: "✅", valueColor: "#00D4AA"),
+                    KeyValueComponent(key: "Last Updated", value: "Today", icon: "📅", valueColor: nil),
+                    KeyValueComponent(key: "License", value: "MIT", icon: "📜", valueColor: "#9177C7")
+                ], layout: .vertical))
+            ]
+        )
+    }
+
+    /// Demo: Interactive components (button, optionCards, toggle, tabs)
+    public static func interactiveComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 700, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#CA6673", secondaryColor: "#9177C7", background: .warm, mood: .creative, icon: "🎮", title: "Interactive Components"),
+            components: [
+                .heading(HeadingComponent(text: "Buttons", level: 2, icon: "🔘")),
+                .buttonGroup(ButtonGroupComponent(buttons: [
+                    ButtonComponent(label: "Primary", action: UIAction(type: .custom, payload: "primary"), style: .primary, icon: "star.fill"),
+                    ButtonComponent(label: "Secondary", action: UIAction(type: .custom, payload: "secondary"), style: .secondary, icon: nil),
+                    ButtonComponent(label: "Ghost", action: UIAction(type: .custom, payload: "ghost"), style: .ghost, icon: nil),
+                    ButtonComponent(label: "Delete", action: UIAction(type: .custom, payload: "delete"), style: .destructive, icon: "trash")
+                ], layout: .horizontal)),
+                .divider(DividerComponent(style: .gradient)),
+                .heading(HeadingComponent(text: "Option Cards", level: 2, icon: "🃏")),
+                .optionCards(OptionCardsComponent(cards: [
+                    OptionCardComponent(id: "opt1", title: "Option A", subtitle: "Recommended", content: "This is the first option with detailed description.", icon: "⭐", action: UIAction(type: .select, payload: "opt1")),
+                    OptionCardComponent(id: "opt2", title: "Option B", subtitle: "Alternative", content: "This is another option you might consider.", icon: "🔧", action: UIAction(type: .select, payload: "opt2"))
+                ], selectable: true, layout: .vertical)),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Toggle", level: 2, icon: "🔀")),
+                .toggle(ToggleComponent(label: "Enable Dark Mode", isOn: true, action: UIAction(type: .custom, payload: "toggle")))
+            ]
+        )
+    }
+
+    /// Demo: Layout components (card, collapsible, stack)
+    public static func layoutComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 800, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#4796E3", secondaryColor: "#9177C7", background: .glass, mood: .neutral, icon: "🏗️", title: "Layout Components"),
+            components: [
+                .heading(HeadingComponent(text: "Card Styles", level: 2, icon: "🎴")),
+                .card(CardComponent(
+                    title: "Elevated Card",
+                    subtitle: "With shadow",
+                    content: [
+                        .paragraph(ParagraphComponent(text: "This card has an elevated style with a subtle shadow effect.", style: .body)),
+                        .badge(BadgeComponent(text: "Featured", style: .info, icon: "⭐"))
+                    ],
+                    style: .elevated,
+                    action: nil
+                )),
+                .card(CardComponent(
+                    title: "Glass Card",
+                    subtitle: "Translucent",
+                    content: [
+                        .paragraph(ParagraphComponent(text: "Glass morphism style card with transparency.", style: .body))
+                    ],
+                    style: .glass,
+                    action: nil
+                )),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Collapsible Section", level: 2, icon: "📂")),
+                .collapsible(CollapsibleComponent(
+                    title: "Click to expand/collapse",
+                    icon: "📁",
+                    isExpanded: true,
+                    content: [
+                        .paragraph(ParagraphComponent(text: "This content can be hidden or shown by clicking the header.", style: .body)),
+                        .bulletList(BulletListComponent(items: ["Hidden item 1", "Hidden item 2"], bulletStyle: .arrow))
+                    ]
+                ))
+            ]
+        )
+    }
+
+    /// Demo: Special components (badge, chips, callout, quote)
+    public static func specialComponentsDemo() -> DynamicUISchema {
+        DynamicUISchema(
+            layout: UILayout(direction: .vertical, spacing: .lg, maxWidth: 700, padding: .lg, alignment: .leading),
+            theme: UITheme(accentColor: "#9177C7", secondaryColor: "#CA6673", background: .dark, mood: .friendly, icon: "✨", title: "Special Components"),
+            components: [
+                .heading(HeadingComponent(text: "Badges", level: 2, icon: "🏅")),
+                .stack(StackComponent(direction: .horizontal, spacing: .sm, alignment: .leading, children: [
+                    .badge(BadgeComponent(text: "Default", style: .default, icon: nil)),
+                    .badge(BadgeComponent(text: "Success", style: .success, icon: "✓")),
+                    .badge(BadgeComponent(text: "Warning", style: .warning, icon: "!")),
+                    .badge(BadgeComponent(text: "Error", style: .error, icon: "✗")),
+                    .badge(BadgeComponent(text: "Info", style: .info, icon: "i"))
+                ])),
+                .divider(DividerComponent(style: .gradient)),
+                .heading(HeadingComponent(text: "Chips", level: 2, icon: "🏷️")),
+                .chips(ChipsComponent(chips: [
+                    ChipComponent(text: "Swift", icon: "🍎", selected: true, action: nil),
+                    ChipComponent(text: "Python", icon: "🐍", selected: false, action: nil),
+                    ChipComponent(text: "JavaScript", icon: "☕", selected: false, action: nil),
+                    ChipComponent(text: "Rust", icon: "🦀", selected: false, action: nil)
+                ], selectable: true, multiSelect: true)),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Callouts", level: 2, icon: "📢")),
+                .callout(CalloutComponent(type: .info, title: "Information", message: "This is an informational callout for general notes.")),
+                .callout(CalloutComponent(type: .success, title: "Success!", message: "Operation completed successfully.")),
+                .callout(CalloutComponent(type: .warning, title: "Warning", message: "Please review before proceeding.")),
+                .callout(CalloutComponent(type: .error, title: "Error", message: "Something went wrong. Please try again.")),
+                .callout(CalloutComponent(type: .tip, title: "Pro Tip", message: "Use keyboard shortcuts for faster navigation!")),
+                .divider(DividerComponent(style: .line)),
+                .heading(HeadingComponent(text: "Quotes", level: 2, icon: "💬")),
+                .quote(QuoteComponent(text: "The best way to predict the future is to create it.", author: "Peter Drucker", style: .standard)),
+                .quote(QuoteComponent(text: "Important: This is a highlighted quote for emphasis.", author: nil, style: .highlight)),
+                .quote(QuoteComponent(text: "Be careful with this approach in production.", author: nil, style: .warning))
+            ]
+        )
+    }
+}

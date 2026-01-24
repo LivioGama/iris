@@ -57,19 +57,47 @@ struct DynamicUIRenderer: View {
         }
     }
 
-    private var backgroundColor: Color {
-        switch schema.theme.background {
-        case .dark:
-            return Color(red: 20/255, green: 20/255, blue: 24/255, opacity: 0.92)
-        case .darker:
-            return Color(red: 15/255, green: 15/255, blue: 20/255, opacity: 0.95)
-        case .warm:
-            return Color(red: 30/255, green: 20/255, blue: 40/255, opacity: 0.92)
-        case .cool:
-            return Color(red: 15/255, green: 20/255, blue: 30/255, opacity: 0.95)
-        case .glass:
-            return Color.black.opacity(0.6)
+    private var backgroundColor: some View {
+        ZStack {
+            // Base dark layer
+            Color.black.opacity(0.5)
+
+            // Frosted glass material
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.7)
+
+            // Theme-specific gradient tint
+            backgroundGradient
         }
+    }
+
+    private var backgroundGradient: some View {
+        let tint: Color = {
+            switch schema.theme.background {
+            case .dark:
+                return Color.gray
+            case .darker:
+                return Color.black
+            case .warm:
+                return Color.orange
+            case .cool:
+                return Color.blue
+            case .glass:
+                return accentColor
+            }
+        }()
+
+        return LinearGradient(
+            colors: [
+                tint.opacity(0.08),
+                Color.clear,
+                accentColor.opacity(0.03),
+                Color.purple.opacity(0.02)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private var accentColor: Color {
@@ -370,13 +398,14 @@ struct DynamicUIRenderer: View {
                         .font(.system(size: 12))
                 }
                 Text(component.label)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
             }
             .padding(.horizontal, IRISSpacing.md)
             .padding(.vertical, IRISSpacing.sm)
             .foregroundColor(buttonForeground(component.style))
             .background(buttonBackground(component.style))
-            .cornerRadius(IRISRadius.normal)
+            .clipShape(RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous))
+            .shadow(color: buttonShadowColor(component.style), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -390,17 +419,67 @@ struct DynamicUIRenderer: View {
         }
     }
 
+    private func buttonShadowColor(_ style: IRISCore.ButtonStyle) -> Color {
+        switch style {
+        case .primary: return accentColor.opacity(0.3)
+        case .secondary: return Color.black.opacity(0.2)
+        case .ghost: return Color.clear
+        case .destructive: return Color.red.opacity(0.3)
+        }
+    }
+
     private func buttonBackground(_ style: IRISCore.ButtonStyle) -> some View {
-        Group {
+        ZStack {
             switch style {
             case .primary:
-                accentGradient
+                // Liquid glass primary button
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.6), accentColor.opacity(0.4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.2), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.4), accentColor.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
             case .secondary:
-                Color.black.opacity(0.3)
+                // Liquid glass secondary
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
             case .ghost:
-                Color.clear
+                // Transparent with subtle border
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .stroke(accentColor.opacity(0.3), lineWidth: 0.5)
             case .destructive:
-                Color.red.opacity(0.8)
+                // Liquid glass destructive
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.red.opacity(0.5), Color.red.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                    .stroke(Color.red.opacity(0.4), lineWidth: 0.5)
             }
         }
     }
@@ -463,16 +542,10 @@ struct DynamicUIRenderer: View {
                     .lineSpacing(4)
             }
             .padding(IRISSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: IRISRadius.normal)
-                    .fill(Color.black.opacity(isSelected ? 0.4 : 0.2))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: IRISRadius.normal)
-                    .stroke(isSelected ? accentColor : Color.clear, lineWidth: 2)
-            )
+            .background(liquidGlassCard(isSelected: isSelected, tint: accentColor))
         }
         .buttonStyle(.plain)
+        .shadow(color: isSelected ? accentColor.opacity(0.2) : Color.clear, radius: 12, x: 0, y: 6)
     }
 
     private func renderOptionCards(_ component: OptionCardsComponent) -> some View {
@@ -495,15 +568,12 @@ struct DynamicUIRenderer: View {
                 .toggleStyle(SwitchToggleStyle(tint: accentColor))
         }
         .padding(IRISSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.2))
-        )
+        .background(liquidGlassCard(isSelected: false, tint: accentColor))
     }
 
     private func renderTabs(_ component: TabsComponent) -> some View {
         VStack(spacing: IRISSpacing.md) {
-            // Tab bar
+            // Tab bar with liquid glass
             HStack(spacing: IRISSpacing.xs) {
                 ForEach(Array(component.tabs.enumerated()), id: \.offset) { index, tab in
                     Button(action: { selectedTabIndex = index }) {
@@ -519,18 +589,19 @@ struct DynamicUIRenderer: View {
                         .padding(.vertical, IRISSpacing.sm)
                         .foregroundColor(selectedTabIndex == index ? IRISColors.textPrimary : IRISColors.textSecondary)
                         .background(
-                            RoundedRectangle(cornerRadius: IRISRadius.tight)
-                                .fill(selectedTabIndex == index ? accentColor.opacity(0.3) : Color.clear)
+                            Capsule()
+                                .fill(selectedTabIndex == index ? accentColor.opacity(0.25) : Color.clear)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(selectedTabIndex == index ? accentColor.opacity(0.4) : Color.clear, lineWidth: 0.5)
+                                )
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(IRISSpacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: IRISRadius.normal)
-                    .fill(Color.black.opacity(0.2))
-            )
+            .background(liquidGlassCard(isSelected: false, tint: accentColor))
 
             // Tab content
             if selectedTabIndex < component.tabs.count {
@@ -545,17 +616,18 @@ struct DynamicUIRenderer: View {
 
     private func renderCodeBlock(_ component: CodeBlockComponent) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
+            // Header with glass effect
             HStack {
                 Text(component.language.uppercased())
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .tracking(1)
-                    .foregroundColor(IRISColors.textSecondary)
+                    .foregroundColor(accentColor.opacity(0.9))
                     .padding(.horizontal, IRISSpacing.xs)
                     .padding(.vertical, IRISSpacing.xxs)
                     .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.black.opacity(0.3))
+                        Capsule()
+                            .fill(accentColor.opacity(0.15))
+                            .overlay(Capsule().stroke(accentColor.opacity(0.3), lineWidth: 0.5))
                     )
 
                 Spacer()
@@ -572,8 +644,9 @@ struct DynamicUIRenderer: View {
                         .padding(.horizontal, IRISSpacing.xs)
                         .padding(.vertical, IRISSpacing.xxs)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.black.opacity(0.3))
+                            Capsule()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 0.5))
                         )
                     }
                     .buttonStyle(.plain)
@@ -581,7 +654,7 @@ struct DynamicUIRenderer: View {
             }
             .padding(.horizontal, IRISSpacing.sm)
             .padding(.vertical, IRISSpacing.xs)
-            .background(Color.black.opacity(0.2))
+            .background(Color.black.opacity(0.3))
 
             // Code content
             ScrollView(.horizontal) {
@@ -593,10 +666,8 @@ struct DynamicUIRenderer: View {
             }
             .frame(maxHeight: 300)
         }
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.3))
-        )
+        .background(liquidGlassCard(isSelected: false, tint: accentColor))
+        .clipShape(RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous))
     }
 
     private func renderCodeComparison(_ component: CodeComparisonComponent) -> some View {
@@ -708,9 +779,17 @@ struct DynamicUIRenderer: View {
 
     private func renderQuote(_ component: QuoteComponent) -> some View {
         HStack(spacing: IRISSpacing.sm) {
-            Rectangle()
-                .fill(quoteColor(component.style))
+            // Glowing accent bar
+            RoundedRectangle(cornerRadius: 2)
+                .fill(
+                    LinearGradient(
+                        colors: [quoteColor(component.style), quoteColor(component.style).opacity(0.5)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .frame(width: 3)
+                .shadow(color: quoteColor(component.style).opacity(0.5), radius: 4, x: 0, y: 0)
 
             VStack(alignment: .leading, spacing: IRISSpacing.xs) {
                 Text(component.text)
@@ -726,10 +805,7 @@ struct DynamicUIRenderer: View {
             }
         }
         .padding(IRISSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.15))
-        )
+        .background(liquidGlassCard(isSelected: false, tint: quoteColor(component.style)))
     }
 
     private func quoteColor(_ style: QuoteStyle) -> Color {
@@ -744,6 +820,7 @@ struct DynamicUIRenderer: View {
         HStack(alignment: .top, spacing: IRISSpacing.sm) {
             Text(calloutIcon(component.type))
                 .font(.system(size: 18))
+                .shadow(color: calloutColor(component.type).opacity(0.5), radius: 4, x: 0, y: 0)
 
             VStack(alignment: .leading, spacing: IRISSpacing.xs) {
                 if let title = component.title {
@@ -758,14 +835,7 @@ struct DynamicUIRenderer: View {
             }
         }
         .padding(IRISSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(calloutColor(component.type).opacity(0.15))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .stroke(calloutColor(component.type).opacity(0.3), lineWidth: 1)
-        )
+        .background(liquidGlassCard(isSelected: false, tint: calloutColor(component.type)))
     }
 
     private func calloutIcon(_ type: CalloutType) -> String {
@@ -847,10 +917,7 @@ struct DynamicUIRenderer: View {
             }
         }
         .padding(IRISSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.2))
-        )
+        .background(liquidGlassCard(isSelected: false, tint: accentColor))
     }
 
     private func renderProgressBar(_ component: ProgressBarComponent) -> some View {
@@ -901,7 +968,13 @@ struct DynamicUIRenderer: View {
             HStack(alignment: .bottom, spacing: IRISSpacing.xs) {
                 Text(component.value)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(IRISColors.textPrimary)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [IRISColors.textPrimary, IRISColors.textPrimary.opacity(0.8)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
 
                 if let trend = component.trend, let trendValue = component.trendValue {
                     HStack(spacing: 2) {
@@ -916,10 +989,7 @@ struct DynamicUIRenderer: View {
             }
         }
         .padding(IRISSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.2))
-        )
+        .background(liquidGlassCard(isSelected: false, tint: accentColor))
     }
 
     private func trendIcon(_ trend: MetricTrend) -> String {
@@ -994,6 +1064,12 @@ struct DynamicUIRenderer: View {
                         Text(subtitle)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(accentColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(accentColor.opacity(0.15))
+                            )
                     }
                 }
             }
@@ -1003,34 +1079,7 @@ struct DynamicUIRenderer: View {
             }
         }
         .padding(IRISSpacing.md)
-        .background(cardBackground(component.style))
-        .overlay(cardOverlay(component.style))
-        .cornerRadius(IRISRadius.normal)
-    }
-
-    @ViewBuilder
-    private func cardBackground(_ style: CardStyle) -> some View {
-        switch style {
-        case .flat:
-            Color.black.opacity(0.15)
-        case .elevated:
-            Color.black.opacity(0.25)
-        case .outlined:
-            Color.clear
-        case .glass:
-            Color.white.opacity(0.05)
-        }
-    }
-
-    @ViewBuilder
-    private func cardOverlay(_ style: CardStyle) -> some View {
-        switch style {
-        case .outlined:
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .stroke(IRISColors.stroke, lineWidth: 1)
-        default:
-            EmptyView()
-        }
+        .background(liquidGlassCard(isSelected: false, tint: accentColor))
     }
 
     private func renderCollapsible(_ component: CollapsibleComponent) -> some View {
@@ -1061,9 +1110,13 @@ struct DynamicUIRenderer: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(IRISColors.textSecondary)
+                        .padding(6)
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                        )
                 }
                 .padding(IRISSpacing.md)
-                .background(Color.black.opacity(0.2))
             }
             .buttonStyle(.plain)
 
@@ -1077,10 +1130,7 @@ struct DynamicUIRenderer: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: IRISRadius.normal)
-                .fill(Color.black.opacity(0.1))
-        )
+        .background(liquidGlassCard(isSelected: isExpanded, tint: accentColor))
         .onAppear {
             if component.isExpanded {
                 expandedSections.insert(component.title)
@@ -1143,9 +1193,14 @@ struct DynamicUIRenderer: View {
         .padding(.vertical, IRISSpacing.xxs)
         .foregroundColor(badgeColor(component.style))
         .background(
-            RoundedRectangle(cornerRadius: IRISRadius.tight)
-                .fill(badgeColor(component.style).opacity(0.2))
+            Capsule()
+                .fill(badgeColor(component.style).opacity(0.15))
+                .overlay(
+                    Capsule()
+                        .stroke(badgeColor(component.style).opacity(0.3), lineWidth: 0.5)
+                )
         )
+        .shadow(color: badgeColor(component.style).opacity(0.2), radius: 4, x: 0, y: 2)
     }
 
     private func badgeColor(_ style: BadgeStyle) -> Color {
@@ -1177,9 +1232,14 @@ struct DynamicUIRenderer: View {
             .padding(.vertical, IRISSpacing.xs)
             .foregroundColor(component.selected ? .white : IRISColors.textSecondary)
             .background(
-                RoundedRectangle(cornerRadius: IRISRadius.soft)
-                    .fill(component.selected ? accentColor : Color.black.opacity(0.2))
+                Capsule()
+                    .fill(component.selected ? accentColor.opacity(0.4) : Color.white.opacity(0.08))
+                    .overlay(
+                        Capsule()
+                            .stroke(component.selected ? accentColor.opacity(0.6) : Color.white.opacity(0.15), lineWidth: 0.5)
+                    )
             )
+            .shadow(color: component.selected ? accentColor.opacity(0.3) : Color.clear, radius: 6, x: 0, y: 3)
         }
         .buttonStyle(.plain)
     }
@@ -1196,6 +1256,19 @@ struct DynamicUIRenderer: View {
 
     private func modeBadge(title: String, icon: String?) -> some View {
         HStack(spacing: IRISSpacing.xs) {
+            // Glowing indicator dot
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [accentColor, accentColor.opacity(0.5)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 4
+                    )
+                )
+                .frame(width: 8, height: 8)
+                .shadow(color: accentColor.opacity(0.6), radius: 4, x: 0, y: 0)
+
             if let icon = icon {
                 Text(icon)
                     .font(.system(size: 14))
@@ -1203,14 +1276,32 @@ struct DynamicUIRenderer: View {
 
             Text(title)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundColor(IRISColors.textSecondary)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.9), Color.white.opacity(0.6)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
         }
-        .padding(.horizontal, IRISSpacing.sm)
+        .padding(.horizontal, IRISSpacing.md)
         .padding(.vertical, IRISSpacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: IRISRadius.tight)
-                .fill(Color.black.opacity(0.2))
+            Capsule()
+                .fill(Color.white.opacity(0.08))
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.2), Color.white.opacity(0.05)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
         )
+        .shadow(color: accentColor.opacity(0.15), radius: 8, x: 0, y: 4)
     }
 
     private func screenshotView(_ screenshot: NSImage, config: ScreenshotDisplayConfig) -> some View {
@@ -1228,6 +1319,57 @@ struct DynamicUIRenderer: View {
                 }
             )
             .opacity(config.opacity)
+    }
+
+    // MARK: - Liquid Glass Helper
+
+    private func liquidGlassCard(isSelected: Bool, tint: Color) -> some View {
+        ZStack {
+            // Base glass layer
+            RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+
+            // Gradient tint overlay
+            RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            tint.opacity(isSelected ? 0.15 : 0.06),
+                            tint.opacity(isSelected ? 0.08 : 0.02)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            // Inner highlight
+            RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.04),
+                            Color.clear
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 150
+                    )
+                )
+
+            // Border stroke
+            RoundedRectangle(cornerRadius: IRISRadius.normal, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            tint.opacity(isSelected ? 0.5 : 0.2),
+                            tint.opacity(isSelected ? 0.2 : 0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: isSelected ? 1 : 0.5
+                )
+        }
     }
 
     // MARK: - Actions
