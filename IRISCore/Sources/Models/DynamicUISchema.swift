@@ -155,7 +155,7 @@ public enum UIMood: String, Codable, Equatable {
 
 // MARK: - Screenshot Configuration
 
-public struct ScreenshotDisplayConfig: Codable, Equatable {
+public struct ScreenshotDisplayConfig: Equatable {
     public let visible: Bool
     public let position: ScreenshotPosition
     public let size: ScreenshotSize
@@ -177,6 +177,22 @@ public struct ScreenshotDisplayConfig: Codable, Equatable {
         self.opacity = opacity
         self.cornerRadius = cornerRadius
         self.showBorder = showBorder
+    }
+}
+
+extension ScreenshotDisplayConfig: Codable {
+    enum CodingKeys: String, CodingKey {
+        case visible, position, size, opacity, cornerRadius, showBorder
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        visible = try container.decodeIfPresent(Bool.self, forKey: .visible) ?? true
+        position = try container.decodeIfPresent(ScreenshotPosition.self, forKey: .position) ?? .top
+        size = try container.decodeIfPresent(ScreenshotSize.self, forKey: .size) ?? .medium
+        opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? 0.8
+        cornerRadius = try container.decodeIfPresent(CGFloat.self, forKey: .cornerRadius)
+        showBorder = try container.decodeIfPresent(Bool.self, forKey: .showBorder) ?? true
     }
 }
 

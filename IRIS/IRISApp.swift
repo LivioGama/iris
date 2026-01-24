@@ -219,13 +219,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.level = .statusBar  // Always on top, above all other windows
             window.isOpaque = false
             window.backgroundColor = .clear
-            // Don't use ignoresMouseEvents - let SwiftUI views control hit testing
-            // window.ignoresMouseEvents = true
+            window.ignoresMouseEvents = true  // Pass through all clicks
             window.acceptsMouseMovedEvents = false
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             window.hasShadow = false
 
-            let hostingView = NSHostingView(rootView: OverlayView(screen: screen).environmentObject(coordinator))
+            let hostingView = PassThroughHostingView(rootView: OverlayView(screen: screen).environmentObject(coordinator))
             window.contentView = hostingView
 
             // Ensure the window is ordered front but doesn't become key
@@ -255,10 +254,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Custom window that passes through mouse events when Gemini overlay is inactive
+/// Custom window that passes through mouse events except for interactive UI elements
 class PassThroughWindow: NSWindow {
     weak var coordinator: IRISCoordinator?
-    private var updateTimer: Timer?
 
     // CRITICAL: Override to prevent focus stealing
     override var canBecomeKey: Bool { false }
@@ -268,27 +266,17 @@ class PassThroughWindow: NSWindow {
         self.coordinator = coordinator
         super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
 
-        // Start timer to update ignoresMouseEvents based on Gemini state
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.updateMouseEventHandling()
-        }
+        // Ignore all mouse events - overlay is purely visual
+        self.ignoresMouseEvents = true
     }
+}
 
-    private func updateMouseEventHandling() {
-        guard let coordinator = coordinator else { return }
-
-        // Only block mouse events when Gemini overlay has interactive content
-        // The overlay needs to receive clicks for the close button
-        let gemini = coordinator.geminiAssistant
-        let overlayActive = gemini.isListening || gemini.isProcessing ||
-                           !gemini.chatMessages.isEmpty || gemini.capturedScreenshot != nil
-
-        // When overlay is active, allow mouse events so close button works
-        // When inactive, pass through all mouse events to underlying apps
-        self.ignoresMouseEvents = !overlayActive
-    }
-
-    deinit {
-        updateTimer?.invalidate()
+/// Custom hosting view that always passes through clicks
+/// The overlay is purely visual - no interactive elements
+class PassThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Always pass through to apps behind
+        // The overlay is purely visual with no interactive elements
+        return nil
     }
 }

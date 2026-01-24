@@ -116,9 +116,8 @@ struct OverlayView: View {
             }
 
             // New ethereal overlay based on working pattern
-            // Enable hit testing ONLY when screenshot is visible (for close button)
+            // Don't set allowsHitTesting here - let internal views control it
             EtherealFloatingOverlay(geminiService: coordinator.geminiAssistant)
-                .allowsHitTesting(coordinator.geminiAssistant.capturedScreenshot != nil)
 
             if showDebugOverlays {
                 VStack {

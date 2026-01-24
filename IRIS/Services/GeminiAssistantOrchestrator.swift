@@ -89,7 +89,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
     // HARDCODED FLAG: Skip voice input and send this prompt directly
     private let skipVoiceInput = true
-    private let hardcodedPrompt = "what to reply"
+    private let hardcodedPrompt = "better implementation"
 
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility

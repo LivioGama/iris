@@ -262,25 +262,26 @@ public class DynamicUIResponseParser {
         let schemaPattern = "```ui-schema\\s*([\\s\\S]*?)\\s*```"
         var schema: DynamicUISchema? = nil
 
-        print("🔍 Parsing response for UI schema...")
-        print("🔍 Response contains 'ui-schema': \(response.contains("ui-schema"))")
+        try? "🔍 Parsing response for UI schema...\n".appendLine(to: "/tmp/iris_ui.log")
+        try? "🔍 Response contains 'ui-schema': \(response.contains("ui-schema"))\n".appendLine(to: "/tmp/iris_ui.log")
+        try? "🔍 Response preview: \(String(response.prefix(500)))...\n".appendLine(to: "/tmp/iris_ui.log")
 
         if let schemaRegex = try? NSRegularExpression(pattern: schemaPattern),
            let schemaMatch = schemaRegex.firstMatch(in: response, range: NSRange(response.startIndex..., in: response)),
            let schemaRange = Range(schemaMatch.range(at: 1), in: response) {
             let jsonString = String(response[schemaRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-            print("🔍 Found JSON schema block, length: \(jsonString.count)")
-            print("🔍 JSON preview: \(String(jsonString.prefix(300)))...")
+            try? "🔍 Found JSON schema block, length: \(jsonString.count)\n".appendLine(to: "/tmp/iris_ui.log")
+            try? "🔍 JSON preview: \(String(jsonString.prefix(500)))...\n".appendLine(to: "/tmp/iris_ui.log")
 
             do {
                 schema = try parseUISchema(json: jsonString)
-                print("✅ Successfully parsed UI schema!")
+                try? "✅ Successfully parsed UI schema!\n".appendLine(to: "/tmp/iris_ui.log")
             } catch {
-                print("❌ Failed to parse UI schema: \(error)")
-                print("❌ JSON that failed: \(jsonString)")
+                try? "❌ Failed to parse UI schema: \(error)\n".appendLine(to: "/tmp/iris_ui.log")
+                try? "❌ JSON that failed: \(jsonString)\n".appendLine(to: "/tmp/iris_ui.log")
             }
         } else {
-            print("⚠️ No ui-schema block found in response")
+            try? "⚠️ No ui-schema block found in response\n".appendLine(to: "/tmp/iris_ui.log")
         }
 
         return (text, schema)
