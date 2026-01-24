@@ -279,7 +279,7 @@ class PassThroughWindow: NSWindow {
 
         // Only block mouse events when Gemini overlay has interactive content
         // The overlay needs to receive clicks for the close button
-        let gemini = coordinator.geminiService
+        let gemini = coordinator.geminiAssistant
         let overlayActive = gemini.isListening || gemini.isProcessing ||
                            !gemini.chatMessages.isEmpty || gemini.capturedScreenshot != nil
 

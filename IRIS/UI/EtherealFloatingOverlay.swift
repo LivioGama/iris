@@ -238,90 +238,108 @@ struct EtherealFloatingOverlay: View {
 
     // MARK: - Components
 
+    // Animation states for processing
+    @State private var starRotation: Double = 0
+    @State private var starPulse: CGFloat = 1.0
+    @State private var gradientRotation: Double = 0
+
     @ViewBuilder
     private var bigGeminiStar: some View {
-        // Authentic Gemini 4-pointed sparkle using proper curved shape
+        let isAnimating = geminiService.isProcessing
+
         ZStack {
             // Outer glow layer - very large and soft
             GeminiStarShape(sharpness: 0.68)
                 .fill(
-                    LinearGradient(
+                    AngularGradient(
                         colors: [
-                            Color(hex: "4796E3").opacity(0.15),  // Gemini blue
-                            Color(hex: "9177C7").opacity(0.12),  // Gemini purple
-                            Color(hex: "CA6673").opacity(0.06),  // Gemini pink
+                            Color(hex: "4796E3").opacity(0.15),
+                            Color(hex: "9177C7").opacity(0.12),
+                            Color(hex: "CA6673").opacity(0.10),
+                            Color(hex: "9177C7").opacity(0.12),
+                            Color(hex: "4796E3").opacity(0.15),
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        center: .center,
+                        startAngle: .degrees(gradientRotation),
+                        endAngle: .degrees(gradientRotation + 360)
                     )
                 )
-                .frame(width: 800, height: 800)  // Huge outer glow
+                .frame(width: 800, height: 800)
                 .blur(radius: 60)
-                .scaleEffect(geminiService.isProcessing ? 1.3 : 1.1)
-                .opacity(geminiService.isProcessing ? 0.7 : 0.4)
-                .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+                .scaleEffect(isAnimating ? 1.3 * starPulse : 1.1)
+                .opacity(isAnimating ? 0.7 : 0.4)
+                .rotationEffect(.degrees(isAnimating ? starRotation * 0.3 : 0))
 
             // Mid layer - defines the shape more
             GeminiStarShape(sharpness: 0.68)
                 .fill(
-                    LinearGradient(
+                    AngularGradient(
                         colors: [
-                            Color(hex: "4796E3").opacity(0.25),
-                            Color(hex: "9177C7").opacity(0.2),
-                            Color(hex: "CA6673").opacity(0.1),
+                            Color(hex: "9177C7").opacity(0.25),
+                            Color(hex: "CA6673").opacity(0.18),
+                            Color(hex: "4796E3").opacity(0.20),
+                            Color(hex: "CA6673").opacity(0.18),
+                            Color(hex: "9177C7").opacity(0.25),
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        center: .center,
+                        startAngle: .degrees(-gradientRotation * 0.7),
+                        endAngle: .degrees(-gradientRotation * 0.7 + 360)
                     )
                 )
                 .frame(width: 600, height: 600)
                 .blur(radius: 35)
-                .scaleEffect(geminiService.isProcessing ? 1.25 : 1.08)
-                .animation(.easeInOut(duration: 2.3).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+                .scaleEffect(isAnimating ? 1.25 * starPulse : 1.08)
+                .rotationEffect(.degrees(isAnimating ? -starRotation * 0.5 : 0))
 
             // Sharp inner layer - crisp definition
             GeminiStarShape(sharpness: 0.68)
                 .fill(
-                    LinearGradient(
+                    AngularGradient(
                         colors: [
-                            Color(hex: "4796E3").opacity(0.35),
-                            Color(hex: "9177C7").opacity(0.28),
-                            Color(hex: "CA6673").opacity(0.15),
+                            Color(hex: "4796E3").opacity(0.40),
+                            Color(hex: "9177C7").opacity(0.35),
+                            Color(hex: "CA6673").opacity(0.30),
+                            Color(hex: "9177C7").opacity(0.35),
+                            Color(hex: "4796E3").opacity(0.40),
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        center: .center,
+                        startAngle: .degrees(gradientRotation * 1.2),
+                        endAngle: .degrees(gradientRotation * 1.2 + 360)
                     )
                 )
                 .frame(width: 450, height: 450)
                 .blur(radius: 18)
-                .scaleEffect(geminiService.isProcessing ? 1.2 : 1.05)
-                .animation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+                .scaleEffect(isAnimating ? 1.2 * starPulse : 1.05)
+                .rotationEffect(.degrees(isAnimating ? starRotation * 0.8 : 0))
 
             // Ultra-sharp core - maximum definition
             GeminiStarShape(sharpness: 0.68)
                 .fill(
-                    LinearGradient(
+                    AngularGradient(
                         colors: [
+                            Color(hex: "CA6673").opacity(0.50),
                             Color(hex: "4796E3").opacity(0.45),
-                            Color(hex: "9177C7").opacity(0.35),
-                            Color(hex: "CA6673").opacity(0.2),
+                            Color(hex: "9177C7").opacity(0.40),
+                            Color(hex: "4796E3").opacity(0.45),
+                            Color(hex: "CA6673").opacity(0.50),
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        center: .center,
+                        startAngle: .degrees(-gradientRotation * 1.5),
+                        endAngle: .degrees(-gradientRotation * 1.5 + 360)
                     )
                 )
                 .frame(width: 350, height: 350)
                 .blur(radius: 8)
-                .scaleEffect(geminiService.isProcessing ? 1.15 : 1.02)
-                .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+                .scaleEffect(isAnimating ? 1.15 * starPulse : 1.02)
+                .rotationEffect(.degrees(isAnimating ? -starRotation : 0))
 
             // Center bright core
             GeminiStarShape(sharpness: 0.68)
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(hex: "4796E3").opacity(0.5),
-                            Color(hex: "9177C7").opacity(0.4),
+                            Color(hex: "4796E3").opacity(isAnimating ? 0.8 : 0.5),
+                            Color(hex: "9177C7").opacity(isAnimating ? 0.6 : 0.4),
                             Color.clear
                         ],
                         center: .center,
@@ -331,8 +349,29 @@ struct EtherealFloatingOverlay: View {
                 )
                 .frame(width: 280, height: 280)
                 .blur(radius: 5)
-                .scaleEffect(geminiService.isProcessing ? 1.1 : 1.0)
-                .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: geminiService.isProcessing)
+                .scaleEffect(isAnimating ? 1.1 * starPulse : 1.0)
+                .rotationEffect(.degrees(isAnimating ? starRotation * 1.2 : 0))
+        }
+        .onChange(of: geminiService.isProcessing) { _, newValue in
+            if newValue {
+                // Start animations
+                withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                    starRotation = 360
+                }
+                withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                    gradientRotation = 360
+                }
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    starPulse = 1.15
+                }
+            } else {
+                // Reset animations
+                withAnimation(.easeOut(duration: 0.5)) {
+                    starRotation = 0
+                    gradientRotation = 0
+                    starPulse = 1.0
+                }
+            }
         }
     }
 
