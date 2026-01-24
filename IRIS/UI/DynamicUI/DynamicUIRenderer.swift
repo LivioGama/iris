@@ -238,6 +238,10 @@ struct DynamicUIRenderer: View {
             AnyView(renderChip(c))
         case .chips(let c):
             AnyView(renderChips(c))
+
+        // Primitive components (template-free dynamic layouts)
+        case .primitive(let node):
+            AnyView(PrimitiveRenderer(node: node, theme: schema.theme, screenshot: screenshot, onAction: onAction))
         }
     }
 
@@ -1372,6 +1376,215 @@ struct DynamicUIRenderer: View {
     private func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+// MARK: - Primitive Renderer
+
+/// Renders primitive nodes for template-free dynamic layouts.
+/// Uses design tokens resolved via TokenResolver for consistent styling.
+struct PrimitiveRenderer: View {
+    let node: PrimitiveNode
+    let theme: UITheme
+    let screenshot: NSImage?
+    var onAction: ((UIAction) -> Void)?
+
+    /// Computed effective style (merges semantic defaults with explicit style)
+    private var effectiveStyle: PrimitiveStyle {
+        let semanticDefaults = SemanticStyleDefaults.style(for: node.semantic)
+        let explicit = node.style ?? PrimitiveStyle()
+
+        // Merge: explicit values override semantic defaults
+        return PrimitiveStyle(
+            layout: explicit.layout ?? semanticDefaults.layout,
+            spacing: explicit.spacing ?? semanticDefaults.spacing,
+            padding: explicit.padding ?? semanticDefaults.padding,
+            alignment: explicit.alignment ?? semanticDefaults.alignment,
+            columns: explicit.columns ?? semanticDefaults.columns,
+            background: explicit.background ?? semanticDefaults.background,
+            radius: explicit.radius ?? semanticDefaults.radius,
+            border: explicit.border ?? semanticDefaults.border,
+            size: explicit.size ?? semanticDefaults.size,
+            weight: explicit.weight ?? semanticDefaults.weight,
+            color: explicit.color ?? semanticDefaults.color,
+            fontFamily: explicit.fontFamily ?? semanticDefaults.fontFamily,
+            width: explicit.width ?? semanticDefaults.width,
+            height: explicit.height ?? semanticDefaults.height,
+            minWidth: explicit.minWidth ?? semanticDefaults.minWidth,
+            maxWidth: explicit.maxWidth ?? semanticDefaults.maxWidth
+        )
+    }
+
+    var body: some View {
+        switch node.type {
+        case .container:
+            renderContainer()
+        case .text:
+            renderText()
+        case .spacer:
+            renderSpacer()
+        case .image:
+            renderImage()
+        case .interactive:
+            renderInteractive()
+        }
+    }
+
+    // MARK: - Container Rendering
+
+    @ViewBuilder
+    private func renderContainer() -> some View {
+        let style = effectiveStyle
+        let children = node.children ?? []
+
+        containerLayout(style: style, children: children)
+            .padding(TokenResolver.spacing(style.padding))
+            .frame(minWidth: style.minWidth, maxWidth: style.maxWidth)
+            .background(
+                RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius), style: .continuous)
+                    .fill(Color.clear)
+                    .background(
+                        TokenResolver.background(style.background, theme: theme, semantic: node.semantic)
+                            .clipShape(RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius), style: .continuous))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius), style: .continuous)
+                    .stroke(
+                        TokenResolver.borderColor(style.border, theme: theme),
+                        lineWidth: TokenResolver.borderWidth(style.border)
+                    )
+            )
+    }
+
+    @ViewBuilder
+    private func containerLayout(style: PrimitiveStyle, children: [PrimitiveNode]) -> some View {
+        switch style.layout ?? .vstack {
+        case .vstack:
+            VStack(alignment: TokenResolver.horizontalAlignment(style.alignment), spacing: TokenResolver.spacing(style.spacing)) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    PrimitiveRenderer(node: child, theme: theme, screenshot: screenshot, onAction: onAction)
+                }
+            }
+
+        case .hstack:
+            HStack(alignment: TokenResolver.verticalAlignment(style.alignment), spacing: TokenResolver.spacing(style.spacing)) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    PrimitiveRenderer(node: child, theme: theme, screenshot: screenshot, onAction: onAction)
+                }
+            }
+
+        case .zstack:
+            ZStack(alignment: TokenResolver.alignment(style.alignment)) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    PrimitiveRenderer(node: child, theme: theme, screenshot: screenshot, onAction: onAction)
+                }
+            }
+
+        case .grid:
+            let columns = style.columns ?? 2
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: TokenResolver.spacing(style.spacing)), count: columns),
+                spacing: TokenResolver.spacing(style.spacing)
+            ) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    PrimitiveRenderer(node: child, theme: theme, screenshot: screenshot, onAction: onAction)
+                }
+            }
+
+        case .flow:
+            FlowLayout(spacing: TokenResolver.spacing(style.spacing)) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    PrimitiveRenderer(node: child, theme: theme, screenshot: screenshot, onAction: onAction)
+                }
+            }
+        }
+    }
+
+    // MARK: - Text Rendering
+
+    @ViewBuilder
+    private func renderText() -> some View {
+        let style = effectiveStyle
+        let content = node.content ?? ""
+
+        Text(content)
+            .font(TokenResolver.font(size: style.size, weight: style.weight, family: style.fontFamily))
+            .foregroundColor(TokenResolver.color(style.color, theme: theme))
+            .lineSpacing(4)
+    }
+
+    // MARK: - Spacer Rendering
+
+    @ViewBuilder
+    private func renderSpacer() -> some View {
+        let style = effectiveStyle
+        Spacer()
+            .frame(height: TokenResolver.spacing(style.spacing ?? .md))
+    }
+
+    // MARK: - Image Rendering
+
+    @ViewBuilder
+    private func renderImage() -> some View {
+        let style = effectiveStyle
+
+        if let source = node.imageSource {
+            switch source {
+            case .screenshot:
+                if let screenshot = screenshot {
+                    Image(nsImage: screenshot)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius)))
+                }
+            case .systemIcon(let name):
+                Image(systemName: name)
+                    .font(.system(size: 24))
+                    .foregroundColor(TokenResolver.color(style.color ?? .accent, theme: theme))
+            case .base64:
+                EmptyView()
+            }
+        }
+    }
+
+    // MARK: - Interactive Rendering
+
+    @ViewBuilder
+    private func renderInteractive() -> some View {
+        let style = effectiveStyle
+
+        Button(action: {
+            if let action = node.action {
+                onAction?(action)
+            }
+        }) {
+            // Render children or content as button label
+            if let children = node.children, !children.isEmpty {
+                containerLayout(style: style, children: children)
+            } else if let content = node.content {
+                Text(content)
+                    .font(TokenResolver.font(size: style.size, weight: style.weight ?? .medium, family: style.fontFamily))
+                    .foregroundColor(TokenResolver.color(style.color ?? .primary, theme: theme))
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(TokenResolver.spacing(style.padding))
+        .background(
+            RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius ?? .normal), style: .continuous)
+                .fill(Color.clear)
+                .background(
+                    TokenResolver.background(style.background ?? .glass, theme: theme, semantic: node.semantic)
+                        .clipShape(RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius ?? .normal), style: .continuous))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: TokenResolver.radius(style.radius ?? .normal), style: .continuous)
+                .stroke(
+                    TokenResolver.borderColor(style.border ?? .subtle, theme: theme),
+                    lineWidth: TokenResolver.borderWidth(style.border ?? .subtle)
+                )
+        )
     }
 }
 

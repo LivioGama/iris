@@ -117,6 +117,78 @@ public class DynamicUIPromptBuilder {
         - **chip**: `{"text": "Tag", "icon": "🏷", "selected": false}`
         - **chips**: `{"chips": [...], "selectable": true, "multiSelect": false}`
 
+        ### Primitive Components (Advanced - for novel layouts)
+        Use primitives when you need layouts that don't fit existing components. Primitives use design tokens (not raw values) for consistent styling.
+
+        #### Container Primitive
+        ```json
+        {
+          "primitive": {
+            "type": "container",
+            "semantic": "comparison",  // Optional hint for smart styling
+            "style": {
+              "layout": "hstack",       // vstack | hstack | zstack | grid | flow
+              "spacing": "md",          // none | xxs | xs | sm | md | lg | xl | xxl
+              "padding": "lg",
+              "alignment": "leading",   // leading | center | trailing
+              "columns": 2,             // For grid layout
+              "background": "glass",    // none | glass | glassDark | solid | solidSubtle | gradient
+              "radius": "normal",       // none | tight | normal | relaxed | soft | round | full
+              "border": "subtle"        // none | subtle | normal | accent | gradient
+            },
+            "children": [...]
+          }
+        }
+        ```
+
+        #### Text Primitive
+        ```json
+        {
+          "primitive": {
+            "type": "text",
+            "content": "Hello World",
+            "style": {
+              "size": "headline",       // display | title | headline | body | caption | micro
+              "weight": "semibold",     // light | regular | medium | semibold | bold | heavy
+              "color": "accent",        // primary | secondary | accent | muted | success | warning | error | info
+              "fontFamily": "rounded"   // system | rounded | monospace | serif
+            }
+          }
+        }
+        ```
+
+        #### Spacer Primitive
+        ```json
+        {"primitive": {"type": "spacer", "style": {"spacing": "lg"}}}
+        ```
+
+        #### Image Primitive
+        ```json
+        {"primitive": {"type": "image", "imageSource": {"screenshot": true}, "style": {"radius": "normal"}}}
+        {"primitive": {"type": "image", "imageSource": {"systemIcon": "star.fill"}, "style": {"color": "accent"}}}
+        ```
+
+        #### Interactive Primitive
+        ```json
+        {
+          "primitive": {
+            "type": "interactive",
+            "content": "Click me",
+            "action": {"type": "copy", "payload": "text"},
+            "style": {"background": "glass", "padding": "sm", "radius": "normal"}
+          }
+        }
+        ```
+
+        #### Semantic Hints
+        Add `"semantic"` to containers for smart default styling:
+        - `"card"`, `"card-elevated"` → Glass background, relaxed radius
+        - `"code-block"`, `"code"` → Dark glass, monospace font
+        - `"callout-info"`, `"callout-warning"`, `"callout-error"`, `"callout-success"` → Appropriate colors
+        - `"comparison"`, `"split"` → Horizontal layout, glass background
+        - `"metric"`, `"stat"` → Centered, glass card
+        - `"tag"`, `"chip"`, `"badge"` → Pill shape, subtle background
+
         ### Action Types
         - `copy`: Copy payload to clipboard
         - `speak`: Text-to-speech
@@ -126,6 +198,11 @@ public class DynamicUIPromptBuilder {
         - `custom`: Custom action identifier
 
         ## GUIDELINES
+
+        0. **When to Use Primitives vs Templates**:
+           - Use **templates** (heading, codeBlock, optionCards, etc.) for common patterns - they're optimized and consistent
+           - Use **primitives** when you need a layout that doesn't exist (e.g., side-by-side comparison, custom grid, novel arrangement)
+           - Primitives are powerful but require more tokens - prefer templates when they fit
 
         1. **Match UI to Context**:
            - Code-related → use codeBlock, codeComparison, analytical mood
@@ -430,7 +507,27 @@ public class DynamicUIResponseParser {
             return .chips(chips)
         }
 
+        // Primitive component
+        if let primitive = raw.primitive {
+            return .primitive(parsePrimitive(primitive))
+        }
+
         return nil
+    }
+
+    /// Parse a raw primitive node into a PrimitiveNode
+    private func parsePrimitive(_ raw: RawPrimitiveNode) -> PrimitiveNode {
+        let children: [PrimitiveNode]? = raw.children?.map { parsePrimitive($0) }
+
+        return PrimitiveNode(
+            type: raw.type,
+            semantic: raw.semantic,
+            style: raw.style,
+            content: raw.content,
+            children: children,
+            action: raw.action,
+            imageSource: raw.imageSource
+        )
     }
 }
 
@@ -476,6 +573,9 @@ private struct RawComponent: Codable {
     var badge: BadgeComponent?
     var chip: ChipComponent?
     var chips: ChipsComponent?
+
+    // Primitive component (template-free dynamic layouts)
+    var primitive: RawPrimitiveNode?
 }
 
 /// Raw tabs with nested raw components
@@ -513,6 +613,17 @@ private struct RawCollapsibleComponent: Codable {
     let icon: String?
     let isExpanded: Bool
     var content: [RawComponent]
+}
+
+/// Raw primitive node with nested children
+private struct RawPrimitiveNode: Codable {
+    let type: PrimitiveType
+    let semantic: String?
+    let style: PrimitiveStyle?
+    let content: String?
+    let children: [RawPrimitiveNode]?
+    let action: UIAction?
+    let imageSource: ImageSource?
 }
 
 // MARK: - Extended Parsing Support

@@ -57,9 +57,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // MARK: - Dynamic UI Properties
     @Published public var dynamicUISchema: DynamicUISchema? = nil // AI-generated UI schema
     @Published public var useDynamicUI: Bool = true // Toggle between dynamic UI and classic ICOI modes
-    @Published public var demoAllTemplates: Bool = true // When true, shows demo control panel for testing UI templates
+    @Published public var demoAllTemplates: Bool = false // When true, shows demo control panel for testing UI templates
     @Published public var autoShowDemoOnLaunch: Bool = false // When true, automatically displays the first demo template on launch
-    @Published public var showAllTemplatesShowcase: Bool = true // When true, shows all templates at once in a grid
+    @Published public var showAllTemplatesShowcase: Bool = false // When true, shows all templates at once in a grid
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -93,6 +93,26 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // HARDCODED FLAG: Skip voice input and send this prompt directly
     private let skipVoiceInput = false
     private let hardcodedPrompt = ""
+
+    // MOCK FLAG: Return mock response instead of calling Gemini API
+    private let mockGeminiResponse = true
+    private let mockResponseText = """
+    ```response
+    I've improved your code with better variable naming, error handling, and modern Swift practices.
+    ```
+
+    ```ui-schema
+    {
+      "layout": {"direction": "vertical", "spacing": "lg", "maxWidth": 900, "padding": "lg", "alignment": "leading"},
+      "theme": {"accentColor": "#0066FF", "secondaryColor": "#00D4FF", "background": "darker", "mood": "analytical", "icon": "💻", "title": "Code Improvement"},
+      "components": [
+        {"codeComparison": {"beforeCode": "func process(d: [String: Any]) -> Bool {\\n  if d[\\"name\\"] != nil {\\n    print(d[\\"name\\"]!)\\n    return true\\n  }\\n  return false\\n}", "afterCode": "func processUserData(_ userData: [String: Any]) -> Bool {\\n  guard let userName = userData[\\"name\\"] as? String else {\\n    return false\\n  }\\n  print(userName)\\n  return true\\n}", "language": "swift", "improvements": ["Descriptive function and parameter names", "Safe unwrapping with guard-let", "Proper type casting", "Eliminated force unwrap"]}},
+        {"callout": {"type": "tip", "title": "Pro Tip", "message": "Always prefer guard-let over force unwrapping to prevent runtime crashes."}}
+      ],
+      "screenshotConfig": {"visible": false, "position": "hidden", "size": "small", "opacity": 0.8}
+    }
+    ```
+    """
 
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility
@@ -555,29 +575,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
     }
 
-    /// Starts the inactivity timer to auto-close overlay after 10 seconds
+    /// Starts the inactivity timer - DISABLED (user controls dismissal via scroll up)
     private func startInactivityTimer() {
-        // Cancel existing timer
-        inactivityTimer?.invalidate()
-
-        // Start new timer
-        inactivityTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self,
-                  let lastActivity = self.lastActivityTime else {
-                return
-            }
-
-            let elapsed = Date().timeIntervalSince(lastActivity)
-
-            // Check if we're still inactive (not listening, not processing, no user action)
-            let isInactive = !self.isListening && !self.isProcessing
-
-            // If inactive for 10 seconds, close overlay
-            if isInactive && elapsed >= self.inactivityTimeout {
-                print("⏱️ Inactivity timeout reached (\(elapsed)s) - auto-closing overlay")
-                self.autoCloseOverlay()
-            }
-        }
+        // Inactivity auto-close disabled - user dismisses via scroll up gesture or voice command
+        // Keeping the method for potential future use
+        print("⏱️ Inactivity timer disabled (user controls dismissal via scroll up)")
     }
 
     /// Stops the inactivity timer
@@ -702,18 +704,26 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         // Send streaming request
         print("🌐 About to send Gemini API streaming request...")
         do {
-            print("🌐 Calling geminiClient.sendStreamingRequest...")
-
             // Clear previous live response
             await MainActor.run {
                 self.liveGeminiResponse = ""
             }
 
-            let responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
-                // Update live Gemini response in real-time
-                Task { @MainActor in
-                    self?.liveGeminiResponse = partialText
-                    self?.markActivity()  // Mark activity when Gemini is responding
+            let responseText: String
+            if mockGeminiResponse {
+                print("🔧 MOCK MODE: Returning mock Gemini response")
+                responseText = mockResponseText
+                await MainActor.run {
+                    self.liveGeminiResponse = mockResponseText
+                }
+            } else {
+                print("🌐 Calling geminiClient.sendStreamingRequest...")
+                responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
+                    // Update live Gemini response in real-time
+                    Task { @MainActor in
+                        self?.liveGeminiResponse = partialText
+                        self?.markActivity()  // Mark activity when Gemini is responding
+                    }
                 }
             }
 
@@ -823,11 +833,20 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 self.liveGeminiResponse = ""
             }
 
-            let responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
-                // Update live Gemini response in real-time
-                Task { @MainActor in
-                    self?.liveGeminiResponse = partialText
-                    self?.markActivity()  // Mark activity when Gemini is responding
+            let responseText: String
+            if mockGeminiResponse {
+                print("🔧 MOCK MODE: Returning mock Gemini response")
+                responseText = mockResponseText
+                await MainActor.run {
+                    self.liveGeminiResponse = mockResponseText
+                }
+            } else {
+                responseText = try await geminiClient.sendStreamingRequest(history: conversationManager.getHistory()) { [weak self] partialText in
+                    // Update live Gemini response in real-time
+                    Task { @MainActor in
+                        self?.liveGeminiResponse = partialText
+                        self?.markActivity()  // Mark activity when Gemini is responding
+                    }
                 }
             }
 
@@ -1215,14 +1234,9 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             print("✅ Gemini response received")
         }
 
-        // Start auto-close timer (5 seconds) - but NOT for code improvement
-        // Code improvement needs time to review side-by-side comparison
-        if intentClassification.intent != .codeImprovement {
-            startAutoCloseTimer()
-            print("⏰ Auto-close timer started for intent: \(intentClassification.intent.rawValue)")
-        } else {
-            print("⏰ Auto-close timer skipped for code improvement (user needs time to review)")
-        }
+        // Auto-close timer removed - user explicitly dismissed via scroll up or voice command
+        // Keeping user in control of when to close the overlay
+        print("⏰ Auto-close timer disabled (user controls dismissal via scroll up or voice command)")
 
         startListeningForFollowup()
     }
@@ -1314,11 +1328,8 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
                 }
 
                 if followupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    print("⚠️ No follow-up question detected after 5s timeout - auto-closing overlay")
-                    // Instead of restarting the loop, trigger auto-close
-                    DispatchQueue.main.async {
-                        self.shouldAutoClose = true
-                    }
+                    print("⚠️ No follow-up question detected after 5s timeout - keeping overlay open (user dismisses via scroll up)")
+                    // Don't auto-close - user can dismiss via scroll up gesture or voice command
                     return
                 }
 

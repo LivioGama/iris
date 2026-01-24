@@ -260,6 +260,9 @@ public enum UIComponent: Codable, Equatable {
     case badge(BadgeComponent)
     case chip(ChipComponent)
     case chips(ChipsComponent)
+
+    // Primitive components (for dynamic, template-free layouts)
+    case primitive(PrimitiveNode)
 }
 
 // MARK: - Text Components
@@ -763,6 +766,370 @@ public enum DynamicUIParseError: Error {
     case invalidJSON
     case missingRequiredField(String)
     case invalidComponentType(String)
+}
+
+// MARK: - Primitive Components (Template-Free Dynamic Layouts)
+
+/// A primitive node for fully dynamic, template-free UI generation.
+/// The AI can compose these primitives freely to create novel layouts.
+public struct PrimitiveNode: Codable, Equatable {
+    /// The type of primitive: container, text, spacer, image, or interactive
+    public let type: PrimitiveType
+
+    /// Optional semantic hint for smart styling (e.g., "code-block", "callout-warning", "card")
+    public let semantic: String?
+
+    /// Style properties using design tokens (not raw values)
+    public let style: PrimitiveStyle?
+
+    /// Content for text primitives
+    public let content: String?
+
+    /// Children for container primitives
+    public let children: [PrimitiveNode]?
+
+    /// Action for interactive primitives
+    public let action: UIAction?
+
+    /// Image source for image primitives
+    public let imageSource: ImageSource?
+
+    public init(
+        type: PrimitiveType,
+        semantic: String? = nil,
+        style: PrimitiveStyle? = nil,
+        content: String? = nil,
+        children: [PrimitiveNode]? = nil,
+        action: UIAction? = nil,
+        imageSource: ImageSource? = nil
+    ) {
+        self.type = type
+        self.semantic = semantic
+        self.style = style
+        self.content = content
+        self.children = children
+        self.action = action
+        self.imageSource = imageSource
+    }
+}
+
+/// The type of primitive component
+public enum PrimitiveType: String, Codable, Equatable {
+    case container   // Layout container (VStack, HStack, Grid, etc.)
+    case text        // Text element with styling
+    case spacer      // Empty space
+    case image       // Image element
+    case interactive // Tappable element with action
+}
+
+/// Style properties for primitives using design tokens
+public struct PrimitiveStyle: Codable, Equatable {
+    // Layout tokens (for containers)
+    public let layout: LayoutToken?
+    public let spacing: SpacingToken?
+    public let padding: SpacingToken?
+    public let alignment: LayoutAlignment?
+    public let columns: Int?  // For grid layout
+
+    // Background tokens
+    public let background: BackgroundToken?
+    public let radius: RadiusToken?
+    public let border: BorderToken?
+
+    // Text tokens
+    public let size: TextSizeToken?
+    public let weight: TextWeightToken?
+    public let color: ColorToken?
+    public let fontFamily: FontFamilyToken?
+
+    // Size constraints
+    public let width: SizeToken?
+    public let height: SizeToken?
+    public let minWidth: CGFloat?
+    public let maxWidth: CGFloat?
+
+    public init(
+        layout: LayoutToken? = nil,
+        spacing: SpacingToken? = nil,
+        padding: SpacingToken? = nil,
+        alignment: LayoutAlignment? = nil,
+        columns: Int? = nil,
+        background: BackgroundToken? = nil,
+        radius: RadiusToken? = nil,
+        border: BorderToken? = nil,
+        size: TextSizeToken? = nil,
+        weight: TextWeightToken? = nil,
+        color: ColorToken? = nil,
+        fontFamily: FontFamilyToken? = nil,
+        width: SizeToken? = nil,
+        height: SizeToken? = nil,
+        minWidth: CGFloat? = nil,
+        maxWidth: CGFloat? = nil
+    ) {
+        self.layout = layout
+        self.spacing = spacing
+        self.padding = padding
+        self.alignment = alignment
+        self.columns = columns
+        self.background = background
+        self.radius = radius
+        self.border = border
+        self.size = size
+        self.weight = weight
+        self.color = color
+        self.fontFamily = fontFamily
+        self.width = width
+        self.height = height
+        self.minWidth = minWidth
+        self.maxWidth = maxWidth
+    }
+}
+
+// MARK: - Design Tokens
+
+/// Layout direction token
+public enum LayoutToken: String, Codable, Equatable {
+    case vstack     // Vertical stack
+    case hstack     // Horizontal stack
+    case zstack     // Layered stack
+    case grid       // Grid layout
+    case flow       // Wrapping flow layout
+}
+
+/// Spacing token (maps to IRISSpacing values)
+public enum SpacingToken: String, Codable, Equatable {
+    case none
+    case xxs    // 4pt
+    case xs     // 8pt
+    case sm     // 12pt
+    case md     // 16pt
+    case lg     // 24pt
+    case xl     // 32pt
+    case xxl    // 48pt
+
+    public var value: CGFloat {
+        switch self {
+        case .none: return 0
+        case .xxs: return 4
+        case .xs: return 8
+        case .sm: return 12
+        case .md: return 16
+        case .lg: return 24
+        case .xl: return 32
+        case .xxl: return 48
+        }
+    }
+}
+
+/// Corner radius token (maps to IRISRadius values)
+public enum RadiusToken: String, Codable, Equatable {
+    case none       // 0pt
+    case tight      // 8pt - buttons, tags
+    case normal     // 12pt - cards, panels
+    case relaxed    // 16pt - larger cards
+    case soft       // 20pt - message bubbles
+    case round      // 32pt - special elements
+    case full       // Full rounding (pill shape)
+
+    public var value: CGFloat {
+        switch self {
+        case .none: return 0
+        case .tight: return 8
+        case .normal: return 12
+        case .relaxed: return 16
+        case .soft: return 20
+        case .round: return 32
+        case .full: return 999
+        }
+    }
+}
+
+/// Color token for semantic colors
+public enum ColorToken: String, Codable, Equatable {
+    case primary        // Main text color
+    case secondary      // Muted text color
+    case accent         // Theme accent color
+    case accentSecondary // Secondary accent (for gradients)
+    case muted          // Very subtle text
+    case success        // Green - positive
+    case warning        // Yellow/Orange - caution
+    case error          // Red - negative
+    case info           // Blue - informational
+}
+
+/// Background style token
+public enum BackgroundToken: String, Codable, Equatable {
+    case none           // Transparent
+    case glass          // Glassmorphic (frosted)
+    case glassDark      // Darker glassmorphic
+    case solid          // Solid with accent color at low opacity
+    case solidSubtle    // Very subtle solid background
+    case gradient       // Accent gradient
+}
+
+/// Border style token
+public enum BorderToken: String, Codable, Equatable {
+    case none
+    case subtle         // Very light border
+    case normal         // Standard border
+    case accent         // Accent-colored border
+    case gradient       // Gradient border
+}
+
+/// Text size token
+public enum TextSizeToken: String, Codable, Equatable {
+    case display        // 34pt - Hero text
+    case title          // 24pt - Page titles
+    case headline       // 18pt - Section headers
+    case body           // 14pt - Body text
+    case caption        // 12pt - Small text
+    case micro          // 10pt - Very small text
+}
+
+/// Text weight token
+public enum TextWeightToken: String, Codable, Equatable {
+    case light
+    case regular
+    case medium
+    case semibold
+    case bold
+    case heavy
+}
+
+/// Font family token
+public enum FontFamilyToken: String, Codable, Equatable {
+    case system         // SF Pro (default)
+    case rounded        // SF Pro Rounded
+    case monospace      // SF Mono
+    case serif          // New York
+}
+
+/// Size token for width/height
+public enum SizeToken: String, Codable, Equatable {
+    case auto           // Fit content
+    case full           // Fill available space
+    case half           // 50% of parent
+    case third          // 33% of parent
+    case quarter        // 25% of parent
+}
+
+// MARK: - Semantic Style Defaults
+
+/// Provides default styles based on semantic hints
+public enum SemanticStyleDefaults {
+    /// Get default style for a semantic hint
+    public static func style(for semantic: String?) -> PrimitiveStyle {
+        guard let semantic = semantic?.lowercased() else {
+            return PrimitiveStyle()
+        }
+
+        switch semantic {
+        case "card", "card-elevated":
+            return PrimitiveStyle(
+                layout: .vstack,
+                spacing: .md,
+                padding: .md,
+                background: .glass,
+                radius: .relaxed
+            )
+
+        case "card-outlined":
+            return PrimitiveStyle(
+                layout: .vstack,
+                spacing: .md,
+                padding: .md,
+                background: BackgroundToken.none,
+                radius: .relaxed,
+                border: .normal
+            )
+
+        case "code-block", "code":
+            return PrimitiveStyle(
+                padding: .sm,
+                background: .glassDark,
+                radius: .normal,
+                fontFamily: .monospace
+            )
+
+        case "callout-info", "info":
+            return PrimitiveStyle(
+                layout: .hstack,
+                spacing: .sm,
+                padding: .md,
+                background: .solid,
+                radius: .normal,
+                color: .info
+            )
+
+        case "callout-warning", "warning":
+            return PrimitiveStyle(
+                layout: .hstack,
+                spacing: .sm,
+                padding: .md,
+                background: .solid,
+                radius: .normal,
+                color: .warning
+            )
+
+        case "callout-error", "error":
+            return PrimitiveStyle(
+                layout: .hstack,
+                spacing: .sm,
+                padding: .md,
+                background: .solid,
+                radius: .normal,
+                color: .error
+            )
+
+        case "callout-success", "success":
+            return PrimitiveStyle(
+                layout: .hstack,
+                spacing: .sm,
+                padding: .md,
+                background: .solid,
+                radius: .normal,
+                color: .success
+            )
+
+        case "comparison", "comparison-grid", "split":
+            return PrimitiveStyle(
+                layout: .hstack,
+                spacing: .lg,
+                padding: .md,
+                background: .glass,
+                radius: .relaxed
+            )
+
+        case "metric", "stat":
+            return PrimitiveStyle(
+                layout: .vstack,
+                spacing: .xs,
+                padding: .md,
+                alignment: .center,
+                background: .glass,
+                radius: .normal
+            )
+
+        case "header", "hero":
+            return PrimitiveStyle(
+                layout: .vstack,
+                spacing: .sm,
+                padding: .lg,
+                alignment: .center,
+                background: .gradient
+            )
+
+        case "tag", "chip", "badge":
+            return PrimitiveStyle(
+                padding: .xs,
+                background: .solidSubtle,
+                radius: .full
+            )
+
+        default:
+            return PrimitiveStyle()
+        }
+    }
 }
 
 // MARK: - Demo Templates Generator

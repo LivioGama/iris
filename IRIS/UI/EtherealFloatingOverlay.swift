@@ -490,6 +490,14 @@ struct EtherealFloatingOverlay: View {
     @State private var screenshotOffset: CGFloat = 0
     @State private var showGradient: Bool = false
 
+    // Scroll-to-dismiss state
+    @State private var accumulatedScrollY: CGFloat = 0
+    @State private var dismissAnimationOffset: CGFloat = 0  // Only used for dismiss animation
+    @State private var isDismissing: Bool = false
+    @State private var scrollMonitor: Any? = nil
+    @State private var scrollResetTimer: Timer? = nil
+    private let dismissThreshold: CGFloat = -80  // Accumulated scroll up threshold
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -498,9 +506,12 @@ struct EtherealFloatingOverlay: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .allowsHitTesting(false)
 
-                // Show ethereal elements when overlay is active
-                if isOverlayActive {
+                // Show ethereal elements when overlay is active OR during dismiss animation
+                if isOverlayActive || isDismissing {
                     etherealContent(geometry: geometry)
+                        .offset(y: dismissAnimationOffset)
+                        .opacity(isDismissing ? max(0.0, 1.0 - Double(abs(dismissAnimationOffset)) / 300.0) : 1.0)
+                        .animation(.easeOut(duration: 0.3), value: dismissAnimationOffset)
                         .onAppear {
                             // Animate screenshot sliding up (less offset to stay in view)
                             withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
@@ -512,17 +523,98 @@ struct EtherealFloatingOverlay: View {
                                     showGradient = true
                                 }
                             }
+                            // Start scroll monitor
+                            startScrollMonitor()
                         }
                         .onDisappear {
                             screenshotOffset = 0
                             showGradient = false
+                            accumulatedScrollY = 0
+                            isDismissing = false
+                            stopScrollMonitor()
                         }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
         }
-        .allowsHitTesting(false)
+        .onChange(of: isOverlayActive) { active in
+            if active {
+                startScrollMonitor()
+            } else {
+                stopScrollMonitor()
+            }
+        }
+    }
+
+    // MARK: - Scroll Monitor for Dismiss Gesture
+
+    private func startScrollMonitor() {
+        // Remove existing monitor if any
+        stopScrollMonitor()
+
+        // Add global monitor for scroll wheel events
+        scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [self] event in
+            handleScrollEvent(event)
+        }
+
+        print("🖱️ Scroll monitor started for dismiss gesture")
+    }
+
+    private func stopScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+            print("🖱️ Scroll monitor stopped")
+        }
+        scrollResetTimer?.invalidate()
+        scrollResetTimer = nil
+    }
+
+    private func handleScrollEvent(_ event: NSEvent) {
+        // Only process if overlay is active
+        guard isOverlayActive && !isDismissing else { return }
+
+        // scrollingDeltaY: negative = scroll up (natural scrolling)
+        let deltaY = event.scrollingDeltaY
+
+        // Only accumulate upward scrolls (negative delta)
+        if deltaY < 0 {
+            accumulatedScrollY += deltaY
+
+            // Reset timer - if user stops scrolling, reset accumulation
+            scrollResetTimer?.invalidate()
+            scrollResetTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [self] _ in
+                accumulatedScrollY = 0
+            }
+
+            // Check if threshold reached
+            if accumulatedScrollY < dismissThreshold {
+                triggerDismiss()
+            }
+        }
+    }
+
+    private func triggerDismiss() {
+        guard !isDismissing else { return }
+
+        print("🖱️ Scroll dismiss triggered!")
+        isDismissing = true
+        stopScrollMonitor()
+
+        // Animate slide up and fade out
+        dismissAnimationOffset = -300
+
+        // Reset state after animation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            geminiService.resetConversationState()
+            // Reset animation state AFTER conversation state is cleared
+            DispatchQueue.main.async {
+                isDismissing = false
+                dismissAnimationOffset = 0
+                accumulatedScrollY = 0
+            }
+        }
     }
 
     // CRITICAL: Same condition as working overlay - also check for demo mode with schema
@@ -683,22 +775,108 @@ struct EtherealFloatingOverlay: View {
 
     // MARK: - Components
 
-    // Animation states - Siri-like fluid 3D orb
-    @State private var flowPhase: Double = 0           // Continuous color flow
-    @State private var orbRotationX: Double = 0        // 3D tumble X
-    @State private var orbRotationY: Double = 0        // 3D tumble Y
-    @State private var orbRotationZ: Double = 0        // Spin
-    @State private var morphPhase1: Double = 0         // Blob morph 1
-    @State private var morphPhase2: Double = 0         // Blob morph 2
-    @State private var pulseScale: CGFloat = 1.0       // Breathing pulse
-    @State private var energyWave: Double = 0          // Energy ripple
-    @State private var innerGlow: Double = 0           // Core intensity
-    @State private var isAnimatingOrb: Bool = false    // Track animation state
-
     @ViewBuilder
     private var bigGeminiStar: some View {
-        let isActive = geminiService.isProcessing || geminiService.isListening
+        if geminiService.isProcessing {
+            // Siri-like animated blob during processing
+            animatedGeminiOrb
+        } else {
+            // Static 4-pointed star during listening/idle
+            staticGeminiStar
+        }
+    }
 
+    // Static 4-pointed Gemini star (for listening state)
+    @ViewBuilder
+    private var staticGeminiStar: some View {
+        ZStack {
+            // Outer glow layer
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.15),
+                            Color(hex: "9177C7").opacity(0.12),
+                            Color(hex: "CA6673").opacity(0.06),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 800, height: 800)
+                .blur(radius: 60)
+                .opacity(0.4)
+
+            // Mid layer
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.25),
+                            Color(hex: "9177C7").opacity(0.2),
+                            Color(hex: "CA6673").opacity(0.1),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 600, height: 600)
+                .blur(radius: 35)
+
+            // Sharp inner layer
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.35),
+                            Color(hex: "9177C7").opacity(0.28),
+                            Color(hex: "CA6673").opacity(0.15),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 450, height: 450)
+                .blur(radius: 18)
+
+            // Ultra-sharp core
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.45),
+                            Color(hex: "9177C7").opacity(0.35),
+                            Color(hex: "CA6673").opacity(0.2),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 350, height: 350)
+                .blur(radius: 8)
+
+            // Center bright core
+            GeminiStarShape(sharpness: 0.68)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "4796E3").opacity(0.5),
+                            Color(hex: "9177C7").opacity(0.4),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 180
+                    )
+                )
+                .frame(width: 280, height: 280)
+                .blur(radius: 5)
+        }
+    }
+
+    // Animated Siri-like blob (for processing state)
+    @ViewBuilder
+    private var animatedGeminiOrb: some View {
         TimelineView(.animation(minimumInterval: 1/60)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
 
@@ -707,14 +885,13 @@ struct EtherealFloatingOverlay: View {
                 let baseRadius: CGFloat = 180
 
                 // Calculate fluid motion
-                let flowSpeed = isActive ? 1.5 : 0.4
+                let flowSpeed: Double = 1.5
                 let t = time * flowSpeed
 
-                // 3D perspective values - more dramatic when active
-                let tiltAmount = isActive ? 25.0 : 8.0
+                // 3D perspective values
+                let tiltAmount: Double = 25.0
                 let perspectiveX = sin(t * 0.7) * tiltAmount
                 let perspectiveY = cos(t * 0.5) * tiltAmount
-                let perspectiveZ = sin(t * 0.3) * (isActive ? 15.0 : 5.0)
 
                 // Draw multiple flowing layers for depth
                 for layerIndex in (0..<7).reversed() {
@@ -723,9 +900,9 @@ struct EtherealFloatingOverlay: View {
 
                     // Each layer has different morph timing for organic feel
                     let morphOffset = Double(layerIndex) * 0.4
-                    let morph1 = sin(t * 1.1 + morphOffset) * (isActive ? 0.15 : 0.05)
-                    let morph2 = cos(t * 0.9 + morphOffset) * (isActive ? 0.12 : 0.04)
-                    let morph3 = sin(t * 1.4 + morphOffset * 1.5) * (isActive ? 0.1 : 0.03)
+                    let morph1 = sin(t * 1.1 + morphOffset) * 0.15
+                    let morph2 = cos(t * 0.9 + morphOffset) * 0.12
+                    let morph3 = sin(t * 1.4 + morphOffset * 1.5) * 0.1
 
                     // Create blobby path with sine wave distortions
                     var path = Path()
@@ -739,13 +916,13 @@ struct EtherealFloatingOverlay: View {
                         let wave3 = sin(angle * 7 + t * 2.5) * morph3
                         let radiusVariation = 1.0 + wave1 + wave2 + wave3
 
-                        // Add energy wave when active
-                        let energyPulse = isActive ? sin(angle * 2 - t * 4) * 0.05 * (1 - layerProgress) : 0
+                        // Add energy wave
+                        let energyPulse = sin(angle * 2 - t * 4) * 0.05 * (1 - layerProgress)
 
                         let r = layerRadius * CGFloat(radiusVariation + energyPulse)
 
                         // Apply 3D perspective distortion
-                        let perspectiveScale = 1.0 + sin(angle + perspectiveX * 0.02) * 0.1 * (isActive ? 1.5 : 0.5)
+                        let perspectiveScale = 1.0 + sin(angle + perspectiveX * 0.02) * 0.15
                         let x = center.x + cos(angle) * r * perspectiveScale
                         let yBase = center.y + sin(angle) * r * perspectiveScale
 
@@ -763,7 +940,6 @@ struct EtherealFloatingOverlay: View {
 
                     // Color flow - Gemini palette with smooth transitions
                     let colorPhase = t * 0.8 + Double(layerIndex) * 0.5
-                    let hueShift = sin(colorPhase) * 0.15
 
                     // Base colors: blue (#4796E3), purple (#9177C7), pink (#CA6673)
                     let blueAmount = (sin(colorPhase) + 1) / 2
@@ -774,12 +950,11 @@ struct EtherealFloatingOverlay: View {
                     let g = 0.59 * blueAmount + 0.47 * purpleAmount + 0.40 * pinkAmount
                     let b = 0.89 * blueAmount + 0.78 * purpleAmount + 0.45 * pinkAmount
 
-                    // Opacity based on layer depth - outer layers more transparent
-                    let baseOpacity = isActive ? 0.6 : 0.35
-                    let layerOpacity = baseOpacity * (0.3 + layerProgress * 0.7)
+                    // Opacity based on layer depth
+                    let layerOpacity = 0.6 * (0.3 + layerProgress * 0.7)
 
-                    // Inner glow boost when active
-                    let glowBoost = isActive && layerIndex < 2 ? 0.3 : 0
+                    // Inner glow boost
+                    let glowBoost = layerIndex < 2 ? 0.3 : 0.0
 
                     context.fill(
                         path,
@@ -801,50 +976,45 @@ struct EtherealFloatingOverlay: View {
                     }
                 }
 
-                // Bright core when active
-                if isActive {
-                    let coreRadius = baseRadius * 0.25
-                    let corePulse = 1.0 + sin(t * 3) * 0.1
-                    let corePath = Path(ellipseIn: CGRect(
-                        x: center.x - coreRadius * corePulse,
-                        y: center.y - coreRadius * corePulse,
-                        width: coreRadius * 2 * corePulse,
-                        height: coreRadius * 2 * corePulse
-                    ))
+                // Bright core
+                let coreRadius = baseRadius * 0.25
+                let corePulse = 1.0 + sin(t * 3) * 0.1
+                let corePath = Path(ellipseIn: CGRect(
+                    x: center.x - coreRadius * corePulse,
+                    y: center.y - coreRadius * corePulse,
+                    width: coreRadius * 2 * corePulse,
+                    height: coreRadius * 2 * corePulse
+                ))
 
-                    // White-hot center
-                    context.fill(
-                        corePath,
-                        with: .radialGradient(
-                            Gradient(colors: [
-                                .white.opacity(0.9),
-                                Color(hex: "4796E3").opacity(0.6),
-                                Color(hex: "9177C7").opacity(0.3),
-                                .clear
-                            ]),
-                            center: center,
-                            startRadius: 0,
-                            endRadius: coreRadius * corePulse
-                        )
+                context.fill(
+                    corePath,
+                    with: .radialGradient(
+                        Gradient(colors: [
+                            .white.opacity(0.9),
+                            Color(hex: "4796E3").opacity(0.6),
+                            Color(hex: "9177C7").opacity(0.3),
+                            .clear
+                        ]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: coreRadius * corePulse
                     )
-                }
+                )
             }
-            .blur(radius: isActive ? 8 : 12)
+            .blur(radius: 8)
             .overlay {
                 // Sharp inner detail layer
                 Canvas { context, size in
                     let center = CGPoint(x: size.width / 2, y: size.height / 2)
                     let baseRadius: CGFloat = 140
+                    let t = time * 1.8
 
-                    let t = time * (isActive ? 1.8 : 0.5)
-
-                    // Inner sharp blob
                     var path = Path()
                     let segments = 48
                     for i in 0...segments {
                         let angle = (Double(i) / Double(segments)) * .pi * 2
-                        let wave = sin(angle * 4 + t * 2.5) * (isActive ? 0.12 : 0.04)
-                        let wave2 = cos(angle * 6 + t * 1.8) * (isActive ? 0.08 : 0.02)
+                        let wave = sin(angle * 4 + t * 2.5) * 0.12
+                        let wave2 = cos(angle * 6 + t * 1.8) * 0.08
                         let r = baseRadius * CGFloat(1.0 + wave + wave2)
 
                         let x = center.x + cos(angle) * r
@@ -863,9 +1033,9 @@ struct EtherealFloatingOverlay: View {
                         path,
                         with: .linearGradient(
                             Gradient(colors: [
-                                Color(hex: "4796E3").opacity(isActive ? 0.5 : 0.25),
-                                Color(hex: "9177C7").opacity(isActive ? 0.45 : 0.2),
-                                Color(hex: "CA6673").opacity(isActive ? 0.4 : 0.15)
+                                Color(hex: "4796E3").opacity(0.5),
+                                Color(hex: "9177C7").opacity(0.45),
+                                Color(hex: "CA6673").opacity(0.4)
                             ]),
                             startPoint: CGPoint(
                                 x: center.x + cos(colorT) * 100,
@@ -878,29 +1048,29 @@ struct EtherealFloatingOverlay: View {
                         )
                     )
                 }
-                .blur(radius: isActive ? 3 : 6)
+                .blur(radius: 3)
             }
             // 3D rotation transforms
             .rotation3DEffect(
-                .degrees(sin(time * (isActive ? 0.7 : 0.3)) * (isActive ? 20 : 8)),
+                .degrees(sin(time * 0.7) * 20),
                 axis: (x: 1, y: 0, z: 0),
                 perspective: 0.4
             )
             .rotation3DEffect(
-                .degrees(cos(time * (isActive ? 0.5 : 0.25)) * (isActive ? 25 : 10)),
+                .degrees(cos(time * 0.5) * 25),
                 axis: (x: 0, y: 1, z: 0),
                 perspective: 0.4
             )
             .rotation3DEffect(
-                .degrees(sin(time * (isActive ? 0.4 : 0.2)) * (isActive ? 10 : 4)),
+                .degrees(sin(time * 0.4) * 10),
                 axis: (x: 0, y: 0, z: 1),
                 perspective: 0.5
             )
             // Breathing scale
-            .scaleEffect(1.0 + CGFloat(sin(time * (isActive ? 2.0 : 0.8))) * (isActive ? 0.08 : 0.03))
+            .scaleEffect(1.0 + CGFloat(sin(time * 2.0)) * 0.08)
         }
         .frame(width: 500, height: 500)
-        .drawingGroup() // GPU acceleration
+        .drawingGroup()
     }
 
     @ViewBuilder
@@ -1531,9 +1701,10 @@ struct EtherealFloatingOverlay: View {
                 .transition(.opacity.combined(with: .scale))
             }
 
-            // Audio visualization when listening
+            // Static Gemini star when listening (no audio waves)
             if geminiService.isListening {
-                audioWaves
+                bigGeminiStar
+                    .frame(width: 200, height: 200)
                     .transition(.opacity.combined(with: .scale))
 
                 // Live transcription
