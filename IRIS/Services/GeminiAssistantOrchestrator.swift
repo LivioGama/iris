@@ -87,6 +87,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private var lastBlinkTime: Date?
     private let blinkCooldownPeriod: TimeInterval = 5.0  // 5 seconds cooldown to prevent accidental re-opening
 
+    // HARDCODED FLAG: Skip voice input and send this prompt directly
+    private let skipVoiceInput = true
+    private let hardcodedPrompt = "what to reply"
+
     // Natural overlay state management
     private var isInNaturalMode = false  // Use existing overlay for compatibility
 
@@ -235,6 +239,23 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         // Clear chat messages
         self.chatMessages.removeAll()
+
+        // HARDCODED FLAG: Skip voice input and send prompt directly
+        if skipVoiceInput {
+            print("🔧 HARDCODED MODE: Skipping voice input, sending '\(hardcodedPrompt)' directly")
+            Task { @MainActor in
+                // Add user message to chat
+                self.chatMessages.append(ChatMessage(role: .user, content: self.hardcodedPrompt, timestamp: Date()))
+
+                // Classify intent and send to Gemini
+                let intentClassification = await intentClassificationService.classifyIntent(input: self.hardcodedPrompt)
+                self.currentIntent = intentClassification.intent
+                print("📌 Set currentIntent to: \(intentClassification.intent.rawValue)")
+
+                await self.sendToGemini(screenshot: finalScreenshot, prompt: self.hardcodedPrompt, focusedElement: focusedElement)
+            }
+            return
+        }
 
         // Start voice interaction with 5-second timeout
         let timeoutDuration: TimeInterval = 5.0
