@@ -617,11 +617,12 @@ struct EtherealFloatingOverlay: View {
         }
     }
 
-    // CRITICAL: Same condition as working overlay - also check for demo mode with schema
+    // CRITICAL: Same condition as working overlay - also check for demo mode with schema and proactive suggestions
     private var isOverlayActive: Bool {
         geminiService.isListening || geminiService.isProcessing ||
         !geminiService.chatMessages.isEmpty || geminiService.capturedScreenshot != nil ||
-        (geminiService.demoAllTemplates && geminiService.dynamicUISchema != nil)
+        (geminiService.demoAllTemplates && geminiService.dynamicUISchema != nil) ||
+        geminiService.isAnalyzingScreenshot || !geminiService.proactiveSuggestions.isEmpty
     }
 
     // MARK: - Ethereal Content
@@ -666,6 +667,27 @@ struct EtherealFloatingOverlay: View {
                 // Conversation section ON TOP of the star - no horizontal constraints for overflow
                 ScrollView {
                     VStack(spacing: 20) {
+                        // PROACTIVE MODE: Show analyzing indicator or suggestions
+                        if geminiService.isAnalyzingScreenshot {
+                            analyzingIndicator
+                        } else if !geminiService.proactiveSuggestions.isEmpty {
+                            ProactiveSuggestionsView(
+                                suggestions: geminiService.proactiveSuggestions,
+                                context: geminiService.detectedContext,
+                                onSelect: { suggestion in
+                                    Task {
+                                        await geminiService.executeProactiveSuggestion(suggestion)
+                                    }
+                                },
+                                onCustomRequest: {
+                                    // User wants to speak custom request - suggestions will be cleared when they speak
+                                    print("🎤 Custom request requested - listening active")
+                                }
+                            )
+                            .frame(maxWidth: 500)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+
                         // Show ALL finalized messages from chatMessages
                         ForEach(Array(geminiService.chatMessages.enumerated()), id: \.element.id) { index, message in
                             if message.role == .user {
@@ -751,11 +773,13 @@ struct EtherealFloatingOverlay: View {
                             geminiResponseBubble(text: geminiService.liveGeminiResponse, isStreaming: true)
                         }
 
-                        // Listening hint (only when no messages yet)
+                        // Listening hint (only when no messages yet and not in proactive mode)
                         if geminiService.capturedScreenshot != nil &&
                            geminiService.liveTranscription.isEmpty &&
                            !geminiService.isProcessing &&
-                           geminiService.chatMessages.isEmpty {
+                           geminiService.chatMessages.isEmpty &&
+                           !geminiService.isAnalyzingScreenshot &&
+                           geminiService.proactiveSuggestions.isEmpty {
                             Text("speak now")
                                 .font(.system(size: 12, weight: .ultraLight, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.5))
@@ -1071,6 +1095,43 @@ struct EtherealFloatingOverlay: View {
         }
         .frame(width: 500, height: 500)
         .drawingGroup()
+    }
+
+    // MARK: - Analyzing Indicator (Proactive Mode)
+
+    @ViewBuilder
+    private var analyzingIndicator: some View {
+        VStack(spacing: 16) {
+            // Animated dots with Gemini colors
+            HStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "4796E3"), Color(hex: "9177C7")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 10, height: 10)
+                        .scaleEffect(1.2)
+                        .opacity(0.8)
+                        .animation(
+                            .easeInOut(duration: 0.6)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.2),
+                            value: UUID()
+                        )
+                }
+            }
+
+            Text("Analyzing...")
+                .font(.system(size: 14, weight: .light, design: .rounded))
+                .foregroundColor(.white.opacity(0.6))
+                .tracking(1)
+        }
+        .padding(.vertical, 20)
+        .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }
 
     @ViewBuilder

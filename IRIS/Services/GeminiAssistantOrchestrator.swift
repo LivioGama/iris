@@ -18,6 +18,9 @@ private let clipboardService = ClipboardActionService()
 private let dynamicUIPromptBuilder = DynamicUIPromptBuilder()
 private let dynamicUIResponseParser = DynamicUIResponseParser()
 
+// MARK: - Proactive Intent Services
+private let proactiveIntentPromptBuilder = ProactiveIntentPromptBuilder()
+
 /// High-level orchestrator for Gemini assistant interactions
 /// Responsibility: Workflow coordination ONLY - delegates to specialized services
 public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceCommandDelegate {
@@ -60,6 +63,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var demoAllTemplates: Bool = false // When true, shows demo control panel for testing UI templates
     @Published public var autoShowDemoOnLaunch: Bool = false // When true, automatically displays the first demo template on launch
     @Published public var showAllTemplatesShowcase: Bool = false // When true, shows all templates at once in a grid
+
+    // MARK: - Proactive Intent Properties
+    @Published public var proactiveSuggestions: [ProactiveSuggestion] = [] // Suggestions from screenshot analysis
+    @Published public var isAnalyzingScreenshot: Bool = false // True while analyzing screenshot for suggestions
+    @Published public var detectedContext: String = "" // Context description from Gemini
+    @Published public var useProactiveMode: Bool = true // Toggle proactive suggestions on/off
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -280,7 +289,16 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             return
         }
 
-        // Start voice interaction with 5-second timeout
+        // PROACTIVE MODE: Analyze screenshot immediately and show suggestions
+        if useProactiveMode {
+            print("🔮 PROACTIVE MODE: Analyzing screenshot for intent suggestions...")
+            Task { @MainActor in
+                await self.analyzeScreenshotForIntent(screenshot: finalScreenshot, focusedElement: focusedElement)
+            }
+            return
+        }
+
+        // LEGACY MODE: Start voice interaction with 5-second timeout
         let timeoutDuration: TimeInterval = 5.0
 
         // Update UI state on main thread BEFORE starting timer
@@ -511,6 +529,11 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             self.isListeningForBuffers = false
             self.shouldAutoClose = false
 
+            // Clear proactive suggestions state
+            self.proactiveSuggestions = []
+            self.isAnalyzingScreenshot = false
+            self.detectedContext = ""
+
             // Clear extracted messages state
             self.extractedMessages.removeAll()
             self.waitingForMessageSelection = false
@@ -605,6 +628,344 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     /// Public wrapper for sendToGemini - used by demo mode
     public func sendToGeminiForDemo(screenshot: NSImage, prompt: String) async {
         await sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: nil)
+    }
+
+    // MARK: - Proactive Intent Analysis
+
+    /// Analyzes the screenshot immediately to suggest likely user intents
+    private func analyzeScreenshotForIntent(screenshot: NSImage, focusedElement: DetectedElement?) async {
+        print("🔮 analyzeScreenshotForIntent: Starting proactive analysis...")
+
+        await MainActor.run {
+            self.isAnalyzingScreenshot = true
+            self.proactiveSuggestions = []
+            self.detectedContext = ""
+        }
+
+        // Convert screenshot to base64
+        guard let base64Image = screenshotService.imageToBase64(screenshot) else {
+            print("❌ analyzeScreenshotForIntent: Failed to convert screenshot")
+            await MainActor.run {
+                self.isAnalyzingScreenshot = false
+            }
+            // Fall back to voice-only mode
+            startLegacyVoiceMode(screenshot: screenshot, focusedElement: focusedElement)
+            return
+        }
+
+        // Build the proactive intent prompt
+        let systemPrompt = proactiveIntentPromptBuilder.buildSystemPrompt()
+        let userPrompt = proactiveIntentPromptBuilder.buildUserPrompt()
+        let fullPrompt = systemPrompt + "\n\n" + userPrompt
+
+        // Convert base64 to Data
+        guard let imageData = Data(base64Encoded: base64Image) else {
+            print("❌ analyzeScreenshotForIntent: Failed to decode image data")
+            await MainActor.run {
+                self.isAnalyzingScreenshot = false
+            }
+            startLegacyVoiceMode(screenshot: screenshot, focusedElement: focusedElement)
+            return
+        }
+
+        // Create message for Gemini
+        let message = ModelContent(
+            role: "user",
+            parts: [
+                ModelContent.Part.text(fullPrompt),
+                ModelContent.Part.data(mimetype: "image/jpeg", imageData)
+            ]
+        )
+
+        do {
+            print("🌐 analyzeScreenshotForIntent: Sending to Gemini...")
+
+            let responseText: String
+            if mockGeminiResponse {
+                // Mock proactive response for testing
+                responseText = """
+                ```json
+                {
+                  "context": "Code editor with Swift code visible",
+                  "suggestions": [
+                    {"id": 1, "intent": "code_improvement", "label": "Improve this code", "confidence": 0.85, "auto_execute": false},
+                    {"id": 2, "intent": "explain", "label": "Explain what this does", "confidence": 0.70, "auto_execute": false},
+                    {"id": 3, "intent": "find_bugs", "label": "Find potential bugs", "confidence": 0.60, "auto_execute": false}
+                  ]
+                }
+                ```
+                """
+            } else {
+                // Send non-streaming request for faster response
+                responseText = try await geminiClient.sendRequest(history: [message])
+            }
+
+            print("✅ analyzeScreenshotForIntent: Got response")
+
+            // Parse the response
+            if let parsed = proactiveIntentPromptBuilder.parseResponse(responseText) {
+                await MainActor.run {
+                    self.proactiveSuggestions = parsed.suggestions
+                    self.detectedContext = parsed.context
+                    self.isAnalyzingScreenshot = false
+
+                    print("🔮 Proactive suggestions ready: \(parsed.suggestions.map { $0.label })")
+
+                    // Check for auto-execute (single high-confidence suggestion)
+                    if parsed.suggestions.count == 1,
+                       let suggestion = parsed.suggestions.first,
+                       suggestion.autoExecute && suggestion.confidence >= 0.9 {
+                        print("🚀 Auto-executing high-confidence suggestion: \(suggestion.label)")
+                        Task {
+                            await self.executeProactiveSuggestion(suggestion)
+                        }
+                    }
+                }
+            } else {
+                print("⚠️ analyzeScreenshotForIntent: Failed to parse response")
+                await MainActor.run {
+                    self.isAnalyzingScreenshot = false
+                }
+            }
+
+            // Start listening for voice commands in parallel (for suggestion selection or custom request)
+            startListeningForSuggestionSelection()
+
+        } catch {
+            print("❌ analyzeScreenshotForIntent: Error - \(error)")
+            await MainActor.run {
+                self.isAnalyzingScreenshot = false
+            }
+            // Fall back to voice-only mode on error
+            startLegacyVoiceMode(screenshot: screenshot, focusedElement: focusedElement)
+        }
+    }
+
+    /// Executes a selected proactive suggestion
+    public func executeProactiveSuggestion(_ suggestion: ProactiveSuggestion) async {
+        print("🎯 Executing proactive suggestion: \(suggestion.label) (intent: \(suggestion.intent))")
+
+        guard let screenshot = await MainActor.run(body: { self.capturedScreenshot }) else {
+            print("❌ No screenshot available for execution")
+            return
+        }
+
+        await MainActor.run {
+            // Clear suggestions since we're executing one
+            self.proactiveSuggestions = []
+
+            // Set the current intent for UI layout
+            self.currentIntent = suggestion.icoiIntent
+            print("📌 Set currentIntent to: \(suggestion.icoiIntent.rawValue)")
+
+            // Add user message showing the action
+            self.chatMessages.append(ChatMessage(role: .user, content: suggestion.label, timestamp: Date()))
+        }
+
+        // Get the execution prompt for this suggestion
+        let prompt = suggestion.executionPrompt
+
+        // Send to Gemini with the full context
+        await sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: currentFocusedElement)
+    }
+
+    /// Starts listening for suggestion selection (voice commands like "one", "two", etc.)
+    private func startListeningForSuggestionSelection() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            guard self.capturedScreenshot != nil else {
+                print("⚠️ No screenshot, not starting suggestion listener")
+                return
+            }
+
+            guard !self.isListening else {
+                print("⚠️ Already listening")
+                return
+            }
+
+            print("🎧 Listening for suggestion selection or custom request...")
+
+            let timeout: TimeInterval = 10.0  // Longer timeout for proactive mode
+
+            self.isListening = true
+            self.isListeningForBuffers = true
+            self.bufferCount = 0
+
+            // Set timeout countdown
+            self.remainingTimeout = timeout
+            self.timeoutStartTime = Date()
+            self.startCountdownTimer(totalTimeout: timeout)
+
+            self.voiceInteractionService.startListening(timeout: timeout, useExternalAudio: true, onSpeechDetected: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.countdownTimer?.invalidate()
+                    self?.countdownTimer = nil
+                    self?.remainingTimeout = nil
+                }
+            }, onPartialResult: { [weak self] partialText in
+                DispatchQueue.main.async {
+                    self?.liveTranscription = partialText
+                }
+            }) { [weak self] voiceInput in
+                guard let self = self else { return }
+
+                DispatchQueue.main.async {
+                    self.isListening = false
+                    self.liveTranscription = ""
+                    self.countdownTimer?.invalidate()
+                    self.countdownTimer = nil
+                    self.remainingTimeout = nil
+                }
+
+                // Check for stop command
+                if self.isStopCommand(voiceInput) {
+                    print("🛑 Stop command detected")
+                    DispatchQueue.main.async {
+                        self.resetConversationState()
+                    }
+                    return
+                }
+
+                // Check if user is selecting a suggestion number
+                if let suggestionNumber = self.parseSuggestionSelection(voiceInput) {
+                    let suggestions = self.proactiveSuggestions
+                    if suggestionNumber >= 1 && suggestionNumber <= suggestions.count {
+                        let selectedSuggestion = suggestions[suggestionNumber - 1]
+                        print("🔢 User selected suggestion \(suggestionNumber): \(selectedSuggestion.label)")
+                        Task {
+                            await self.executeProactiveSuggestion(selectedSuggestion)
+                        }
+                        return
+                    } else {
+                        print("⚠️ Invalid suggestion number: \(suggestionNumber), max: \(suggestions.count)")
+                    }
+                }
+
+                // Not a suggestion selection - treat as custom request
+                guard !voiceInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    print("⚠️ Empty voice input - keeping suggestions visible")
+                    // Re-start listening
+                    self.startListeningForSuggestionSelection()
+                    return
+                }
+
+                print("🎤 Custom request: \(voiceInput)")
+
+                // Clear suggestions and process as regular request
+                DispatchQueue.main.async {
+                    self.proactiveSuggestions = []
+                }
+
+                Task { @MainActor in
+                    // Classify intent for the custom request
+                    let intentClassification = await intentClassificationService.classifyIntent(input: voiceInput)
+                    self.currentIntent = intentClassification.intent
+
+                    // Add user message
+                    self.chatMessages.append(ChatMessage(role: .user, content: voiceInput, timestamp: Date()))
+
+                    // Send to Gemini
+                    if let screenshot = self.capturedScreenshot {
+                        await self.sendToGemini(screenshot: screenshot, prompt: voiceInput, focusedElement: self.currentFocusedElement)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Parses voice input to detect suggestion selection (e.g., "one", "1", "first")
+    private func parseSuggestionSelection(_ input: String) -> Int? {
+        let normalized = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // Number words
+        let numberWords: [String: Int] = [
+            "one": 1, "1": 1, "first": 1, "won": 1,
+            "two": 2, "2": 2, "second": 2, "to": 2, "too": 2,
+            "three": 3, "3": 3, "third": 3
+        ]
+
+        // Check for exact match
+        if let number = numberWords[normalized] {
+            return number
+        }
+
+        // Check if input starts with a number word
+        for (word, number) in numberWords {
+            if normalized.hasPrefix(word + " ") || normalized.hasPrefix(word + ".") {
+                return number
+            }
+        }
+
+        // Check for patterns like "option one", "select two", "number three"
+        let patterns = ["option", "select", "number", "choice", "pick"]
+        for pattern in patterns {
+            for (word, number) in numberWords {
+                if normalized.contains("\(pattern) \(word)") {
+                    return number
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Falls back to legacy voice-first mode when proactive analysis fails
+    private func startLegacyVoiceMode(screenshot: NSImage, focusedElement: DetectedElement?) {
+        print("🎤 Falling back to legacy voice mode...")
+
+        let timeoutDuration: TimeInterval = 5.0
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.remainingTimeout = timeoutDuration
+            self.timeoutStartTime = Date()
+            self.startCountdownTimer(totalTimeout: timeoutDuration)
+
+            self.isListeningForBuffers = true
+            self.bufferCount = 0
+        }
+
+        voiceInteractionService.startListening(timeout: timeoutDuration, useExternalAudio: true, onSpeechDetected: { [weak self] in
+            DispatchQueue.main.async {
+                self?.isListening = true
+                self?.countdownTimer?.invalidate()
+                self?.countdownTimer = nil
+                self?.remainingTimeout = nil
+            }
+        }, onPartialResult: { [weak self] partialText in
+            DispatchQueue.main.async {
+                self?.liveTranscription = partialText
+            }
+        }) { [weak self] prompt in
+            guard let self = self else { return }
+
+            DispatchQueue.main.async {
+                self.countdownTimer?.invalidate()
+                self.countdownTimer = nil
+                self.timeoutStartTime = nil
+                self.remainingTimeout = nil
+            }
+
+            if self.isStopCommand(prompt) {
+                DispatchQueue.main.async {
+                    self.resetConversationState()
+                }
+                return
+            }
+
+            guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+
+            Task { @MainActor in
+                let intentClassification = await intentClassificationService.classifyIntent(input: prompt)
+                self.currentIntent = intentClassification.intent
+                self.chatMessages.append(ChatMessage(role: .user, content: prompt, timestamp: Date()))
+                await self.sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: focusedElement)
+            }
+        }
     }
 
     // MARK: - Private Methods
