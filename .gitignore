@@ -30,3 +30,13 @@ __pycache__/
 *~
 .vscode/
 .idea/
+
+# Rust build artifacts
+iris-gaze-rs/target/
+
+# Python virtual environment
+gaze_env/
+
+# Compiled libraries (use build system to regenerate)
+libs/*.a
+libs/*.dylib

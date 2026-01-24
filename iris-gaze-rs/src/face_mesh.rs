@@ -381,10 +381,11 @@ impl FaceMeshDetector {
             let fx = landmarks_data[10 * 3] as f32;
             let fy = landmarks_data[10 * 3 + 1] as f32;
 
-            let norm_nx = (crop_x1 as f32 + (nx * crop_width as f32 / 192.0)) / frame.width as f32;
+            // Mirror X to match Python MediaPipe coordinate system
+            let norm_nx = 1.0 - (crop_x1 as f32 + (nx * crop_width as f32 / 192.0)) / frame.width as f32;
             let norm_ny =
                 (crop_y1 as f32 + (ny * crop_height as f32 / 192.0)) / frame.height as f32;
-            let norm_fx = (crop_x1 as f32 + (fx * crop_width as f32 / 192.0)) / frame.width as f32;
+            let norm_fx = 1.0 - (crop_x1 as f32 + (fx * crop_width as f32 / 192.0)) / frame.width as f32;
             let norm_fy =
                 (crop_y1 as f32 + (fy * crop_height as f32 / 192.0)) / frame.height as f32;
 
@@ -423,7 +424,8 @@ impl FaceMeshDetector {
                 let global_y = crop_y1 as f32 + (y * crop_height as f32 / 192.0);
 
                 // Normalize to 0-1 relative to full frame (matching MediaPipe behavior)
-                let norm_x = global_x / frame.width as f32;
+                // Mirror X coordinate to match Python MediaPipe coordinate system
+                let norm_x = 1.0 - (global_x / frame.width as f32);
                 let norm_y = global_y / frame.height as f32;
 
                 landmarks.push(Point3D::new(norm_x, norm_y, z));

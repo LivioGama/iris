@@ -126,11 +126,44 @@ impl Camera {
             fps
         );
 
-        // Open the default camera (index 0)
-        let mut capture = VideoCapture::new(0, CAP_ANY)?;
+        // Use camera index 1 (MacBook built-in FaceTime camera)
+        // Index 0 is typically Studio Display camera when connected
+        let camera_index = 1;
+
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/iris_rust.log")
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "📷 Opening camera index {}...", camera_index);
+        }
+
+        let mut capture = VideoCapture::new(camera_index, CAP_ANY)?;
 
         if !capture.is_opened()? {
-            return Err(CameraError::NotFound);
+            // Fall back to camera 0 if camera 1 fails
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/iris_rust.log")
+            {
+                use std::io::Write;
+                let _ = writeln!(f, "⚠️ Camera 1 failed, trying camera 0...");
+            }
+            capture = VideoCapture::new(0, CAP_ANY)?;
+            if !capture.is_opened()? {
+                return Err(CameraError::NotFound);
+            }
+        }
+
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/iris_rust.log")
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "✅ Camera opened successfully");
         }
 
         // Set camera properties
