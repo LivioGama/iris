@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --accent-glow: #00ffff; /* Placeholder for cyan/blue glow */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-outfit);
+  --color-brand-purple: #a855f7;
+  --color-brand-cyan: #06b6d4;
+  --color-brand-dark: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #030408; /* Very deep dark blue/black */
+    --foreground: #ededed;
+  }
+}
+
+/* Force dark mode for this hackathon page as requested "premium dark-mode" generally implies it */
+:root {
+  --background: #03040b;
+  --foreground: #f8fafc;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Utilities for Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.text-gradient {
+  background: linear-gradient(to right, #a855f7, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
