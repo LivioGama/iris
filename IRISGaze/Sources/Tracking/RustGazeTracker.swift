@@ -19,6 +19,13 @@ public class RustGazeTracker {
 
     // MARK: - Types
 
+    public enum BlinkEye: UInt8 {
+        case none = 0
+        case left = 1
+        case right = 2
+        case both = 3
+    }
+
     public enum State {
         case idle
         case starting
@@ -70,7 +77,7 @@ public class RustGazeTracker {
     public var onGaze: ((Double, Double) -> Void)?
 
     /// Called when a blink/wink is detected
-    public var onBlink: ((Double, Double) -> Void)?
+    public var onBlink: ((Double, Double, BlinkEye) -> Void)?
 
     /// Called when tracker state changes
     public var onStateChange: ((State) -> Void)?
@@ -209,8 +216,9 @@ public class RustGazeTracker {
             onGaze?(result.x, result.y)
 
         case 2: // Blink/Wink
-            print("👁️ RustGazeTracker: Blink detected at (\(result.x), \(result.y))")
-            onBlink?(result.x, result.y)
+            let blinkEye = BlinkEye(rawValue: result.blink_eye) ?? .none
+            print("👁️ RustGazeTracker: Blink detected at (\(result.x), \(result.y)) eye=\(blinkEye)")
+            onBlink?(result.x, result.y, blinkEye)
 
         default:
             break

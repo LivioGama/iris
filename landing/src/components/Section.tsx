@@ -1,6 +1,6 @@
 export default function Section({ title, items }: { title: string, items: { subtitle?: string, text: string | string[], bullets?: string[] }[] }) {
   return (
-    <section className="py-24 px-8 max-w-5xl mx-auto">
+    <section className="py-12 px-8 max-w-5xl mx-auto">
       <h2 className="text-4xl md:text-5xl font-bold mb-16 text-white border-l-4 border-[var(--color-brand-purple)] pl-6">
         {title}
       </h2>

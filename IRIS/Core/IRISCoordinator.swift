@@ -139,14 +139,23 @@ class IRISCoordinator: ObservableObject {
             }
         }
 
-        gazeEstimator.onBlinkDetected = { [weak self] point, element in
-            print("🎯 IRISCoordinator: onBlinkDetected callback triggered!")
+        gazeEstimator.onBlinkDetectedWithEye = { [weak self] point, element, blinkEye in
+            print("🎯 IRISCoordinator: onBlinkDetectedWithEye callback triggered! eye=\(blinkEye)")
             Task { @MainActor in
                 guard let self = self else { return }
 
-                // Trigger Gemini assistant (now uses continuous audio stream)
-                print("🎯 IRISCoordinator: Calling geminiAssistant.handleBlink")
-                self.geminiAssistant.handleBlink(at: point, focusedElement: element)
+                switch blinkEye {
+                case .left:
+                    let enabled = !self.gazeEstimator.isTrackingEnabled
+                    self.gazeEstimator.setTrackingEnabled(enabled)
+                    self.log(enabled ? "Tracking enabled (left wink)" : "Tracking disabled (left wink)")
+                case .right:
+                    // Trigger Gemini assistant (now uses continuous audio stream)
+                    print("🎯 IRISCoordinator: Calling geminiAssistant.handleBlink")
+                    self.geminiAssistant.handleBlink(at: point, focusedElement: element)
+                case .both, .none:
+                    break
+                }
             }
         }
         print("✅ IRISCoordinator: Blink callback registered")

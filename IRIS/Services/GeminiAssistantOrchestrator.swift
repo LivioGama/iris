@@ -78,7 +78,6 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     private let screenshotService: ScreenshotService
     private let gazeEstimator: GazeEstimator
     private let sentimentAnalysisService = SentimentAnalysisService.shared
-    // private let visionTextDetector = VisionTextDetector() // Commented out for now, VisionTextDetector not found
 
     // MARK: - State
     private var extractedMessages: [String] = []
@@ -708,6 +707,12 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     public func executeProactiveSuggestion(_ suggestion: ProactiveSuggestion) async {
         print("🎯 Executing proactive suggestion: \(suggestion.label) (intent: \(suggestion.intent))")
 
+        // Handle direct browser actions (like search) without Gemini
+        if suggestion.isDirectBrowserAction {
+            await handleDirectBrowserAction(suggestion)
+            return
+        }
+
         guard let screenshot = await MainActor.run(body: { self.capturedScreenshot }) else {
             print("❌ No screenshot available for execution")
             return
@@ -730,6 +735,36 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
         // Send to Gemini with the full context
         await sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: currentFocusedElement)
+    }
+
+    /// Handles direct browser actions like search (no Gemini call needed)
+    private func handleDirectBrowserAction(_ suggestion: ProactiveSuggestion) async {
+        print("🌐 Handling direct browser action: \(suggestion.intent)")
+
+        await MainActor.run {
+            // Clear UI state
+            self.proactiveSuggestions = []
+            self.isOverlayVisible = false
+            self.capturedScreenshot = nil
+            self.chatMessages.removeAll()
+        }
+
+        // Extract search query from the label or context
+        let searchQuery = suggestion.executionPrompt
+            .replacingOccurrences(of: "Search for ", with: "")
+            .replacingOccurrences(of: "Search ", with: "")
+            .replacingOccurrences(of: "Google ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // URL encode the query
+        guard let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") else {
+            print("❌ Failed to create search URL")
+            return
+        }
+
+        print("🔍 Opening Google search: \(url)")
+        NSWorkspace.shared.open(url)
     }
 
     /// Starts listening for suggestion selection (voice commands like "one", "two", etc.)

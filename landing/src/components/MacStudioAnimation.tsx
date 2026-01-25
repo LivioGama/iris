@@ -8,25 +8,19 @@ export default function MacStudioAnimation() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: containerRef,
-    offset: ["start start", "end end"],
+    offset: ["start end", "center center"],
   });
 
   // Animation values
-  // 0 -> 0.5: Mac Studio floats up and "opens" (scales up to fill screen)
-  // 0.5 -> 1.0: Full screen demo active
-
-  // Scroll Physics for "Unfold"
-  // We want: Start tilted back (90deg, flat) and low (y: 200), then rotate up to 0deg (facing user) and rise to center (y: 0).
-  
-  const rotateX = useTransform(scrollYProgress, [0, 0.4], [90, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.4], [0.8, 1]);
-  const y = useTransform(scrollYProgress, [0, 0.4], [200, 0]); 
-  const opacity = useTransform(scrollYProgress, [0, 0.1], [0, 1]);
-  const contentOpacity = useTransform(scrollYProgress, [0.3, 0.4], [0, 1]); // Content fades in as screen faces user
+  const rotateX = useTransform(scrollYProgress, [0, 0.7], [80, 0]); 
+  const scale = useTransform(scrollYProgress, [0, 0.7], [0.7, 1]);  
+  const y = useTransform(scrollYProgress, [0, 0.7], [150, 0]);      
+  const opacity = useTransform(scrollYProgress, [0, 0.15], [0, 1]); 
+  const contentOpacity = useTransform(scrollYProgress, [0.4, 0.7], [0, 1]); 
 
   return (
-    <section ref={containerRef} className="relative h-[250vh] bg-[#03040B] perspective-[2000px] z-10">
-      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden perspective-[2000px] pointer-events-none">
+    <section ref={containerRef} className="relative h-[100vh] bg-[#03040B] perspective-[2000px] z-10">
+      <div className="sticky top-0 h-[75vh] w-full flex items-center justify-center overflow-hidden perspective-[2000px] pointer-events-none">
         
         {/* Apple Studio Display Structure */}
         <motion.div

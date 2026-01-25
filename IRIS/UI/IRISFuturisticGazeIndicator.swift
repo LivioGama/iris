@@ -20,25 +20,36 @@ struct IRISFuturisticGazeIndicator: View {
     @State private var awarenessIntensity: Double = 0.3
     @State private var consciousnessPulse: Double = 1.0
     @State private var timer: Timer?
+    @State private var lastSnappedPosition: CGPoint? = nil
 
     private let indicatorSize: CGFloat = 160
 
-    /// Computes the display position - snaps to element center if enabled and element exists
-    private var snappedPosition: CGPoint? {
-        guard snapToElement,
-              let element = detectedElement,
+    /// Computes the current element's center position if available
+    private var currentElementCenter: CGPoint? {
+        guard let element = detectedElement,
               let localBounds = convertToLocalCoordinates(element.bounds),
               localBounds.width > 0,
               localBounds.height > 0 else {
             return nil
         }
-
-        // Snap to center of the detected element
         return CGPoint(x: localBounds.midX, y: localBounds.midY)
     }
 
     var body: some View {
-        let effectivePosition = snappedPosition ?? gazePoint
+        // When snapping is enabled:
+        // - If element detected: snap to element center
+        // - If no element: stay at last snapped position (don't follow raw gaze)
+        // When snapping is disabled: always follow raw gaze
+        let effectivePosition: CGPoint = {
+            if snapToElement {
+                if let elementCenter = currentElementCenter {
+                    return elementCenter
+                } else if let lastPos = lastSnappedPosition {
+                    return lastPos
+                }
+            }
+            return gazePoint
+        }()
 
         ZStack {
             // Element rectangle highlight (when detected) - absolute positioning
@@ -68,10 +79,20 @@ struct IRISFuturisticGazeIndicator: View {
         }
         .onAppear {
             startConsciousnessCycle()
+            // Initialize last position
+            if let elementCenter = currentElementCenter {
+                lastSnappedPosition = elementCenter
+            }
         }
         .onDisappear {
             timer?.invalidate()
             timer = nil
+        }
+        .onChange(of: detectedElement?.bounds) {
+            // Update last snapped position when a new element is detected
+            if snapToElement, let elementCenter = currentElementCenter {
+                lastSnappedPosition = elementCenter
+            }
         }
     }
 
@@ -198,7 +219,7 @@ struct IRISFuturisticGazeIndicator: View {
             height: intersection.height
         )
 
-        let logEntry = "🔁 Highlight conversion \(screen.localizedName ?? "screen"): AX \(standardized) → AppKit \(appKitRect) → Local \(localRect) | primaryOrigin \(primaryScreen.frame.origin)"
+        let logEntry = "🔁 Highlight conversion \(screen.localizedName): AX \(standardized) → AppKit \(appKitRect) → Local \(localRect) | primaryOrigin \(primaryScreen.frame.origin)"
         print(logEntry)
         try? logEntry.appendLine(to: "/tmp/iris_detection.log")
 

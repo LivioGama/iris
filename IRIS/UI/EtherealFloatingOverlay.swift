@@ -658,7 +658,7 @@ struct EtherealFloatingOverlay: View {
             GeometryReader { geo in
                 if showGradient {
                     bigGeminiStar
-                        .scaleEffect(1.1)
+                        .scaleEffect(0.75)
                         .opacity(0.35)
                         .transition(.opacity)
                         .position(x: geo.size.width / 2, y: geo.size.height * 0.4)  // Centered, slightly above middle
@@ -1145,7 +1145,7 @@ struct EtherealFloatingOverlay: View {
             // Breathing scale
             .scaleEffect(1.0 + CGFloat(sin(time * 2.0)) * 0.08)
         }
-        .frame(width: 800, height: 800)
+        .frame(width: 1200, height: 1200)
         .drawingGroup(opaque: false)
     }
 

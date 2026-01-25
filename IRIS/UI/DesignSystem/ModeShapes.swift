@@ -213,7 +213,7 @@ struct GeneralShape: Shape {
 // MARK: - Shape Type Erasure
 
 /// Type-erased shape wrapper to allow dynamic shape selection
-struct AnyShapeStyle: Shape {
+struct AnyShapeStyle: Shape, @unchecked Sendable {
     private let _path: (CGRect) -> Path
 
     init<S: Shape>(_ shape: S) {

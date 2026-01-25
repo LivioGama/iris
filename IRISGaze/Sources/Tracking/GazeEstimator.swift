@@ -35,12 +35,9 @@ public class GazeEstimator: ObservableObject {
     @MainActor @Published public var calibrationCorner: CalibrationCorner = .none
     @MainActor @Published public var detectedElement: DetectedElement?
 
-    /// When true, the gaze indicator snaps to the center of detected accessibility elements
-    /// instead of following the raw gaze position freely
-    @MainActor @Published public var snapIndicatorToElement: Bool = false
 
     public var dominantEye: DominantEye = .left
-    public var isTrackingEnabled: Bool = true
+    @MainActor @Published public var isTrackingEnabled: Bool = true
     public var currentScreen: NSScreen? = nil // Track which screen user is looking at
     public var shouldScaleForExternalScreen: ((CGPoint) -> Bool)? = nil // Callback to determine if we should scale
 
@@ -48,6 +45,7 @@ public class GazeEstimator: ObservableObject {
     public var onGazeUpdate: ((CGPoint) -> Void)?
     public var onRealTimeDetection: ((DetectedElement) -> Void)?
     public var onBlinkDetected: ((CGPoint, DetectedElement?) -> Void)?
+    public var onBlinkDetectedWithEye: ((CGPoint, DetectedElement?, RustGazeTracker.BlinkEye) -> Void)?
 
     // Lock-free atomics for target position (updated from Python thread)
     // Using UInt64 bit pattern since Double isn't AtomicValue
@@ -58,13 +56,7 @@ public class GazeEstimator: ObservableObject {
     private let springStiffness: CGFloat = 0.55 // Increased from 0.35 for lower latency
     private let calibrationResolution = CGSize(width: 3840, height: 1600)
 
-    // Backend selection: true = Rust (faster), false = Python (fallback)
-    private let useRustBackend: Bool = true
-
-    // Python backend (legacy)
-    private let processManager = PythonProcessManager(scriptName: "eye_tracker.py")
-
-    // Rust backend (new, faster)
+    // Rust backend for gaze tracking
     private let rustTracker = RustGazeTracker()
 
     private var timer: Timer?
@@ -90,6 +82,55 @@ public class GazeEstimator: ObservableObject {
 
     // Kalman filter for predictive smoothing
     private var kalmanFilter = KalmanFilter()
+
+    // Dead Zone Filter - suppresses tiny unwanted movements
+    private struct DeadZoneFilter {
+        var lastStablePosition: CGPoint?
+        let deadZoneRadius: CGFloat = 15.0  // Ignore movements smaller than this
+        let escapeVelocity: CGFloat = 50.0  // Fast movements break out immediately
+        
+        mutating func filter(newPosition: CGPoint, deltaTime: TimeInterval) -> CGPoint {
+            guard let lastPos = lastStablePosition else {
+                lastStablePosition = newPosition
+                return newPosition
+            }
+            
+            let dx = newPosition.x - lastPos.x
+            let dy = newPosition.y - lastPos.y
+            let distance = hypot(dx, dy)
+            
+            // Calculate velocity (pixels per second)
+            let velocity = deltaTime > 0 ? distance / CGFloat(deltaTime) : 0
+            
+            // Fast movements bypass dead zone (intentional saccades)
+            if velocity > escapeVelocity {
+                lastStablePosition = newPosition
+                return newPosition
+            }
+            
+            // Small movements stay in dead zone (micro-jitter suppression)
+            if distance < deadZoneRadius {
+                return lastPos  // Hold position, resist tiny movements
+            }
+            
+            // Medium movements: gradual transition out of dead zone
+            // This creates smooth acceleration when breaking out
+            let transitionFactor = min(1.0, (distance - deadZoneRadius) / deadZoneRadius)
+            let filtered = CGPoint(
+                x: lastPos.x + dx * transitionFactor,
+                y: lastPos.y + dy * transitionFactor
+            )
+            
+            lastStablePosition = filtered
+            return filtered
+        }
+        
+        mutating func reset() {
+            lastStablePosition = nil
+        }
+    }
+    
+    private var deadZoneFilter = DeadZoneFilter()
 
     // Temporal Stability Filter (replaces buffer-based approach)
     private struct TemporalStability {
@@ -157,11 +198,7 @@ public class GazeEstimator: ObservableObject {
             displayPoint = center
         }
 
-        if useRustBackend {
-            setupRustTracker()
-        } else {
-            setupProcessManager()
-        }
+        setupRustTracker()
 
         Task { @MainActor in
             self.startAnimationTimer()
@@ -171,17 +208,17 @@ public class GazeEstimator: ObservableObject {
     private func setupRustTracker() {
         rustTracker.onGaze = { [weak self] x, y in
             guard let self = self else { return }
-            // Store to atomics (same as Python backend)
             self.targetXBits.store(UInt64(x.bitPattern), ordering: .relaxed)
             self.targetYBits.store(UInt64(y.bitPattern), ordering: .relaxed)
         }
 
-        rustTracker.onBlink = { [weak self] x, y in
+        rustTracker.onBlink = { [weak self] x, y, blinkEye in
             guard let self = self else { return }
             let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
-            print("👁️ BLINK DETECTED (Rust) at (\(x), \(y))")
+            print("👁️ BLINK DETECTED (Rust) at (\(x), \(y)) eye=\(blinkEye)")
             Task { @MainActor in
                 self.onBlinkDetected?(blinkPoint, self.detectedElement)
+                self.onBlinkDetectedWithEye?(blinkPoint, self.detectedElement, blinkEye)
             }
         }
 
@@ -203,44 +240,6 @@ public class GazeEstimator: ObservableObject {
                     self?.debugInfo = "Stopped"
                     self?.isTracking = false
                 }
-            }
-        }
-    }
-
-    private func setupProcessManager() {
-        processManager.onOutput = { [weak self] data in
-            Task { @MainActor in
-                self?.parseOutput(data)
-            }
-        }
-
-        processManager.onStateChange = { [weak self] state in
-            Task { @MainActor in
-                switch state {
-                case .starting:
-                    self?.debugInfo = "Starting..."
-                case .running:
-                    self?.debugInfo = "Calibrating..."
-                case .recovering:
-                    self?.debugInfo = "Recovering..."
-                    self?.isTracking = false
-                case .failed(let error):
-                    self?.debugInfo = "Error: \(error.localizedDescription)"
-                    self?.isTracking = false
-                case .idle:
-                    self?.debugInfo = "Stopped"
-                    self?.isTracking = false
-                }
-            }
-        }
-
-        processManager.onError = { error in
-            print("❌ GazeEstimator: Process error - \(error.localizedDescription)")
-        }
-
-        processManager.onRecovery = { [weak self] in
-            Task { @MainActor in
-                self?.debugInfo = "Attempting recovery..."
             }
         }
     }
@@ -281,6 +280,8 @@ public class GazeEstimator: ObservableObject {
     }
 
     private func animateToTarget() {
+        guard isTrackingEnabled else { return }
+
         // Lock-free atomic reads (no contention)
         let rawTarget = CGPoint(
             x: Double(bitPattern: targetXBits.load(ordering: .relaxed)),
@@ -290,10 +291,14 @@ public class GazeEstimator: ObservableObject {
         // Kalman filter prediction (reduces perceived lag by 5-10ms)
         let predictedTarget = kalmanFilter.update(measurement: rawTarget)
 
-        // Spring smoothing on predicted value
+        // Dead zone filter (suppresses micro-jitter and unwanted tiny movements)
+        let deltaTime = 1.0 / 60.0  // 60 FPS
+        let filteredTarget = deadZoneFilter.filter(newPosition: predictedTarget, deltaTime: deltaTime)
+
+        // Spring smoothing on filtered value
         var display = displayPoint
-        display.x += (predictedTarget.x - display.x) * springStiffness
-        display.y += (predictedTarget.y - display.y) * springStiffness
+        display.x += (filteredTarget.x - display.x) * springStiffness
+        display.y += (filteredTarget.y - display.y) * springStiffness
         displayPoint = display
 
         Task { @MainActor in
@@ -458,158 +463,44 @@ public class GazeEstimator: ObservableObject {
 
         try? "📐 Screen: \(screenWidth)x\(screenHeight)".appendLine(to: "/tmp/iris_startup.log")
 
-        if useRustBackend {
-            // Start Rust backend
-            guard !rustTracker.isRunning else {
-                try? "⚠️ Rust tracker already running".appendLine(to: "/tmp/iris_startup.log")
-                return
-            }
+        guard !rustTracker.isRunning else {
+            try? "⚠️ Rust tracker already running".appendLine(to: "/tmp/iris_startup.log")
+            return
+        }
 
-            try? "🦀 Starting Rust backend".appendLine(to: "/tmp/iris_startup.log")
+        try? "🦀 Starting Rust backend".appendLine(to: "/tmp/iris_startup.log")
 
-            do {
-                try rustTracker.start(
-                    screenWidth: screenWidth,
-                    screenHeight: screenHeight,
-                    dominantEye: dominantEye.rawValue
-                )
-                try? "✅ Rust tracker started".appendLine(to: "/tmp/iris_startup.log")
-            } catch {
-                let errMsg = "❌ Rust tracker failed: \(error.localizedDescription)"
-                try? errMsg.appendLine(to: "/tmp/iris_startup.log")
-                Task { @MainActor in
-                    self.debugInfo = "Failed: \(error.localizedDescription)"
-                }
-            }
-        } else {
-            // Start Python backend (legacy)
-            guard !processManager.isRunning else {
-                try? "⚠️ Process manager already running".appendLine(to: "/tmp/iris_startup.log")
-                return
-            }
-
-            // Log environment info
-            let envInfo = IRISCore.PathResolver.getEnvironmentInfo()
-            for (key, value) in envInfo {
-                try? "\(key): \(value)".appendLine(to: "/tmp/iris_startup.log")
-            }
-
-            let arguments = [
-                "--eye", dominantEye.rawValue,
-                String(screenWidth),
-                String(screenHeight)
-            ]
-
-            try? "🐍 Starting Python with args: \(arguments)".appendLine(to: "/tmp/iris_startup.log")
-
-            do {
-                try processManager.start(arguments: arguments)
-                try? "✅ Process manager started".appendLine(to: "/tmp/iris_startup.log")
-            } catch {
-                let errMsg = "❌ GazeEstimator failed: \(error.localizedDescription)"
-                try? errMsg.appendLine(to: "/tmp/iris_startup.log")
-                Task { @MainActor in
-                    self.debugInfo = "Failed: \(error.localizedDescription)"
-                }
+        do {
+            try rustTracker.start(
+                screenWidth: screenWidth,
+                screenHeight: screenHeight,
+                dominantEye: dominantEye.rawValue
+            )
+            try? "✅ Rust tracker started".appendLine(to: "/tmp/iris_startup.log")
+        } catch {
+            let errMsg = "❌ Rust tracker failed: \(error.localizedDescription)"
+            try? errMsg.appendLine(to: "/tmp/iris_startup.log")
+            Task { @MainActor in
+                self.debugInfo = "Failed: \(error.localizedDescription)"
             }
         }
     }
 
-    private func parseOutput(_ data: Data) {
-        let msg = "📥 parseOutput called with \(data.count) bytes"
-        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
+    public func setTrackingEnabled(_ enabled: Bool) {
+        guard isTrackingEnabled != enabled else { return }
+        isTrackingEnabled = enabled
 
-        var offset = 0
-
-        while offset < data.count {
-            // Try to parse binary protocol first
-            if offset + 17 <= data.count {
-                let typeOffset = data.startIndex + offset
-                let type = data[typeOffset]
-
-                // Binary protocol types: 1=gaze, 2=blink, 3=status, 4=calibrate
-                if type >= 1 && type <= 4 {
-                    // Extract x and y coordinates (network byte order = big endian)
-                    let xData = data.subdata(in: (typeOffset + 1)..<(typeOffset + 9))
-                    let yData = data.subdata(in: (typeOffset + 9)..<(typeOffset + 17))
-
-                    // Load as UInt64, swap bytes, then convert to Double
-                    let xBits = xData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian }
-                    let yBits = yData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian }
-                    let x = Double(bitPattern: xBits)
-                    let y = Double(bitPattern: yBits)
-
-                    switch type {
-                    case 1: // TYPE_GAZE
-                        // Lock-free atomic stores (from Python thread)
-                        targetXBits.store(xBits, ordering: .relaxed)
-                        targetYBits.store(yBits, ordering: .relaxed)
-
-                    case 2: // TYPE_BLINK
-                        let blinkPoint = CGPoint(x: CGFloat(x), y: CGFloat(y))
-                        let msg = "👁️ BLINK DETECTED at (\(x), \(y)) - handler=\(self.onBlinkDetected != nil)"
-                        print(msg)
-                        try? msg.appendLine(to: "/tmp/iris_blink_debug.log")
-                        Task { @MainActor in
-                            let msg2 = "👁️ Calling onBlinkDetected handler on main thread"
-                            print(msg2)
-                            try? msg2.appendLine(to: "/tmp/iris_blink_debug.log")
-                            self.onBlinkDetected?(blinkPoint, self.detectedElement)
-                        }
-
-                    default:
-                        break
-                    }
-
-                    offset += 17
-                    continue
-                }
-            }
-
-            // Fallback to JSON parsing for status messages
-            // Find next newline for JSON message boundary
-            let remainingData = data.subdata(in: (data.startIndex + offset)..<data.endIndex)
-            guard let str = String(data: remainingData, encoding: .utf8) else { break }
-
-            let lines = str.components(separatedBy: "\n")
-            guard let line = lines.first, !line.isEmpty else { break }
-
-            // Parse JSON status messages
-            if let jsonData = line.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-
-                if let status = json["status"] as? String {
-                    print("📊 Status message: \(status)")
-                    Task { @MainActor in
-                        if status.starts(with: "calibrate_") {
-                            let corner = String(status.dropFirst(10))
-                            self.calibrationCorner = CalibrationCorner(rawValue: corner) ?? .none
-                            self.debugInfo = "Look at \(corner)"
-                        } else if status == "calibrated" {
-                            self.calibrationCorner = .done
-                            self.debugInfo = "Ready"
-                            self.isTracking = true
-                        } else if status.contains("blink") || status.contains("trigger") {
-                            print("👁️ Blink status: \(status)")
-                            self.debugInfo = status
-                        } else {
-                            self.debugInfo = status
-                        }
-                    }
-                }
-            }
-
-            // Move past this JSON line
-            offset += line.utf8.count + 1 // +1 for newline
+        if !enabled {
+            temporalStability.reset()
+            self.detectedElement = nil
+            self.debugInfo = "Tracking disabled"
+        } else {
+            self.debugInfo = "Tracking enabled"
         }
     }
 
     public func stop() {
-        if useRustBackend {
-            rustTracker.stop()
-        } else {
-            processManager.stop()
-        }
+        rustTracker.stop()
         Task { @MainActor in
             self.isTracking = false
             self.debugInfo = "Stopped"
@@ -617,14 +508,10 @@ public class GazeEstimator: ObservableObject {
     }
 
     public func restart() {
-        if useRustBackend {
-            rustTracker.stop()
-            // Small delay before restarting
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.start()
-            }
-        } else {
-            processManager.restart()
+        rustTracker.stop()
+        // Small delay before restarting
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.start()
         }
     }
 

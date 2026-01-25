@@ -32,8 +32,8 @@ export default function EyeGazeDemo() {
     const rect = ref.current.getBoundingClientRect();
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-    const width = rect.width * 0.6;
-    const height = rect.height * 0.6;
+    const width = rect.width * 0.8;
+    const height = rect.height * 0.8;
 
     // Start position
     x.set(centerX);
@@ -41,11 +41,11 @@ export default function EyeGazeDemo() {
 
     // Animate in 'S' shape
     const controls = animate(0, 1, {
-      duration: 3,
+      duration: 3.5,
       ease: "easeInOut",
       onUpdate: (t) => {
         const currentY = (centerY - height / 2) + (height * t);
-        const currentX = centerX + Math.sin(t * Math.PI * 2) * (width / 2);
+        const currentX = centerX + Math.sin(t * Math.PI * 2.5) * (width / 2);
         
         x.set(currentX);
         y.set(currentY);

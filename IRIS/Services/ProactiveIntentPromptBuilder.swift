@@ -33,6 +33,7 @@ class ProactiveIntentPromptBuilder {
         - `complete`: Finish something partial
         - `translate`: Convert to another language
         - `analyze`: Examine and provide insights
+        - `search`: Search on Google (opens browser directly)
 
         ## Examples
 
@@ -52,6 +53,53 @@ class ProactiveIntentPromptBuilder {
         | Spreadsheet with data | "Analyze this data", "Create chart" |
         | Design tool | "Improve layout", "Suggest colors" |
         | Calendar | "Schedule suggestion", "Summarize my day" |
+        | **Text is selected/highlighted** | See AUTO-SEARCH rule below |
+        | **LLM/AI chat interface** (ChatGPT, Claude, Gemini, Copilot, etc.) | See special handling below |
+
+        ## AUTO-SEARCH: Selected Text (HIGHEST PRIORITY)
+
+        **When text is visibly selected/highlighted on screen:**
+        - Return ONLY ONE suggestion with `intent: "search"` and `auto_execute: true`
+        - Label should be the selected text (or first few words if long)
+        - Confidence must be 0.95
+        - This opens Google search immediately without user confirmation
+
+        Example response for selected text "quantum computing":
+        ```json
+        {
+          "context": "Selected text: quantum computing",
+          "suggestions": [
+            {
+              "id": 1,
+              "intent": "search",
+              "label": "quantum computing",
+              "confidence": 0.95,
+              "auto_execute": true
+            }
+          ]
+        }
+        ```
+
+        ## Special: LLM/AI Chat Interfaces
+
+        When the user is looking at an AI assistant chat (ChatGPT, Claude, Gemini, Perplexity, Copilot, etc.):
+
+        **If there's a prompt/question visible that the user wrote:**
+        - "Rephrase my question" - help reword for clarity
+        - "Add more context" - make the prompt more detailed
+        - "Make it shorter" - condense the prompt
+
+        **If there's an AI response visible:**
+        - "Ask to elaborate" - request more details on the answer
+        - "Question this answer" - challenge or verify accuracy
+        - "What should I ask next?" - suggest follow-up
+        - "Summarize the answer" - condense a long response
+
+        **If the chat input is empty/waiting:**
+        - "Help me phrase this" - assist formulating a question
+        - "What to ask next?" - suggest continuation
+
+        **Detect LLM chats by:** logos, interface patterns (message bubbles, "You"/"Assistant" labels), URLs containing chatgpt, claude, gemini, copilot, perplexity, etc.
 
         ## Response Format
 

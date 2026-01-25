@@ -71,9 +71,16 @@ public extension ProactiveSuggestion {
             return .general // No specific intent, use general
         case "analyze", "analysis":
             return .general
+        case "search":
+            return .general // Search is handled specially
         default:
             return .general
         }
+    }
+
+    /// Whether this suggestion should open browser directly (no Gemini call)
+    var isDirectBrowserAction: Bool {
+        return intent.lowercased() == "search"
     }
 
     /// Get a prompt to send to Gemini for this suggestion
@@ -93,6 +100,8 @@ public extension ProactiveSuggestion {
             return "Please translate this text."
         case "analyze", "analysis":
             return "Please analyze what's shown on screen and provide insights."
+        case "search":
+            return label // The label contains the search query context
         default:
             return label // Use the label as the prompt for unknown intents
         }

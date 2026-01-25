@@ -95,7 +95,14 @@ let package = Package(
                 "IRISNetwork",
                 "IRISMedia"
             ],
-            path: "IRIS"
+            path: "IRIS",
+            exclude: [
+                "IRIS.entitlements",
+                "Info.plist",
+                "Rendering/Shaders.air",
+                "Rendering/Shaders.metal",
+                "Rendering/default.metallib"
+            ]
         ),
 
         // Tests

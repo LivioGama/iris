@@ -125,6 +125,10 @@ typedef struct GazeResult {
    */
   uint8_t event_type;
   /**
+   * Blink eye: 0=none, 1=left, 2=right, 3=both
+   */
+  uint8_t blink_eye;
+  /**
    * Whether this result is valid
    */
   bool valid;

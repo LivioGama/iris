@@ -29,7 +29,7 @@ export default function Home() {
                 bullets: [
                     "Eye tracking for gaze detection and region-of-interest identification",
                     "Voice input for natural language commands and confirmations",
-                    "Gemini 2.0 Flash for multimodal understanding and reasoning",
+                    "Gemini 3.0 Flash for multimodal understanding and reasoning",
                     "Application context awareness for semantic understanding"
                 ]
             }
@@ -70,7 +70,7 @@ export default function Home() {
       />
 
       <Section 
-        title="Accomplishments that we're proud of" 
+        title="Accomplishments that I'm proud of" 
         items={[
             {
                 text: [
@@ -129,7 +129,7 @@ export default function Home() {
       <footer className="max-w-5xl mx-auto px-8 py-12 border-t border-white/10">
         <h3 className="text-2xl font-bold mb-8 text-white">Built With</h3>
         <div className="flex flex-wrap gap-4">
-            {["OpenCV", "Python", "PyTorch", "Rust", "Swift", "TensorFlow"].map((tech) => (
+            {["Swift", "Rust", "Python", "OpenCV", "Gemini 3.0 Flash", "Next.js"].map((tech) => (
                 <span key={tech} className="px-4 py-2 bg-white/5 rounded-full text-gray-300 border border-white/10 text-sm font-medium">
                     {tech}
                 </span>

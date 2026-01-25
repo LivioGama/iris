@@ -10,8 +10,8 @@ pub mod types;
 use std::ffi::c_char;
 use std::ptr;
 
-pub use types::*;
 use python_face_mesh::PythonFaceMeshDetector;
+pub use types::*;
 
 fn log(msg: &str) {
     if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -74,8 +74,8 @@ impl GazeTracker {
             python_face_mesh: None,
             ema_x: sw / 2.0,
             ema_y: sh / 2.0,
-            ema_nose_x: 0.45,  // Will quickly adapt via EMA
-            ema_nose_y: 0.42,  // Will quickly adapt via EMA
+            ema_nose_x: 0.45, // Will quickly adapt via EMA
+            ema_nose_y: 0.42, // Will quickly adapt via EMA
             // Very wide range to handle coordinate variance
             nose_x_min: 0.15,
             nose_x_max: 0.75,
@@ -97,8 +97,10 @@ impl GazeTracker {
     }
 
     fn initialize(&mut self) -> Result<(), GazeError> {
-        log(&format!("🚀 GazeTracker::initialize() - Cal: X={:.2}-{:.2}, Y={:.2}-{:.2}",
-            self.nose_x_min, self.nose_x_max, self.nose_y_min, self.nose_y_max));
+        log(&format!(
+            "🚀 GazeTracker::initialize() - Cal: X={:.2}-{:.2}, Y={:.2}-{:.2}",
+            self.nose_x_min, self.nose_x_max, self.nose_y_min, self.nose_y_max
+        ));
 
         self.status = TrackerStatus::Initializing;
 
@@ -141,48 +143,95 @@ impl GazeTracker {
         // === BLINK DETECTION (matches Python exactly) ===
 
         // Left eye landmarks: 159 (top), 145 (bottom), 33 (left), 133 (right)
-        let left_eye_top = match landmarks.get(159) { Some(p) => p, None => return GazeResult::invalid() };
-        let left_eye_bottom = match landmarks.get(145) { Some(p) => p, None => return GazeResult::invalid() };
-        let left_eye_left = match landmarks.get(33) { Some(p) => p, None => return GazeResult::invalid() };
-        let left_eye_right = match landmarks.get(133) { Some(p) => p, None => return GazeResult::invalid() };
+        let left_eye_top = match landmarks.get(159) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let left_eye_bottom = match landmarks.get(145) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let left_eye_left = match landmarks.get(33) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let left_eye_right = match landmarks.get(133) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
 
         let left_vertical = (left_eye_top.y - left_eye_bottom.y).abs();
         let left_horizontal = (left_eye_right.x - left_eye_left.x).abs();
-        let left_ear = if left_horizontal > 0.0 { left_vertical / left_horizontal } else { 1.0 };
+        let left_ear = if left_horizontal > 0.0 {
+            left_vertical / left_horizontal
+        } else {
+            1.0
+        };
 
         // Right eye landmarks: 386 (top), 374 (bottom), 362 (left), 263 (right)
-        let right_eye_top = match landmarks.get(386) { Some(p) => p, None => return GazeResult::invalid() };
-        let right_eye_bottom = match landmarks.get(374) { Some(p) => p, None => return GazeResult::invalid() };
-        let right_eye_left = match landmarks.get(362) { Some(p) => p, None => return GazeResult::invalid() };
-        let right_eye_right = match landmarks.get(263) { Some(p) => p, None => return GazeResult::invalid() };
+        let right_eye_top = match landmarks.get(386) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let right_eye_bottom = match landmarks.get(374) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let right_eye_left = match landmarks.get(362) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let right_eye_right = match landmarks.get(263) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
 
         let right_vertical = (right_eye_top.y - right_eye_bottom.y).abs();
         let right_horizontal = (right_eye_right.x - right_eye_left.x).abs();
-        let right_ear = if right_horizontal > 0.0 { right_vertical / right_horizontal } else { 1.0 };
+        let right_ear = if right_horizontal > 0.0 {
+            right_vertical / right_horizontal
+        } else {
+            1.0
+        };
 
         // Debug EAR every 30 frames
         if self.frame_count % 30 == 0 {
-            log(&format!("👁️ L_EAR: {:.3}, R_EAR: {:.3} (thresh: {:.2})",
-                left_ear, right_ear, self.eye_ar_thresh));
+            log(&format!(
+                "👁️ L_EAR: {:.3}, R_EAR: {:.3} (thresh: {:.2})",
+                left_ear, right_ear, self.eye_ar_thresh
+            ));
         }
 
         // Check for eye close
         let left_closed = (left_ear as f64) < self.eye_ar_thresh;
         let right_closed = (right_ear as f64) < self.eye_ar_thresh;
-        let is_winking = left_closed || right_closed;
+        let any_eye_closed = left_closed || right_closed;
+        let is_winking = left_closed ^ right_closed; // Exactly one eye closed
 
-        if is_winking {
-            self.eyes_closed_counter += 1;
+        if any_eye_closed {
+            // Only count sustained wink frames (single-eye) for triggers
+            if is_winking {
+                self.eyes_closed_counter += 1;
 
-            // Long blink trigger
-            if self.eyes_closed_counter == self.long_blink_thresh && !self.long_blink_triggered {
-                self.long_blink_triggered = true;
-                let which = if left_closed { "LEFT" } else { "RIGHT" };
-                log(&format!("😉 {} WINK TRIGGERED!", which));
-                return GazeResult::blink(self.ema_x, self.ema_y);
+                // Long wink trigger
+                if self.eyes_closed_counter == self.long_blink_thresh && !self.long_blink_triggered
+                {
+                    self.long_blink_triggered = true;
+                    let (which, blink_eye) = if left_closed {
+                        ("LEFT", 1)
+                    } else {
+                        ("RIGHT", 2)
+                    };
+                    log(&format!("😉 {} WINK TRIGGERED!", which));
+                    return GazeResult::blink(self.ema_x, self.ema_y, blink_eye);
+                }
+            } else {
+                // Both eyes closed - don't count toward wink trigger
+                self.eyes_closed_counter = 0;
+                self.long_blink_triggered = false;
             }
 
-            // Don't update gaze during blink
+            // Don't update gaze during blink/wink
             return GazeResult::gaze(self.ema_x, self.ema_y);
         } else {
             self.eyes_closed_counter = 0;
@@ -192,11 +241,17 @@ impl GazeTracker {
         // === GAZE TRACKING (matches Python exactly) ===
 
         // Get nose tip (landmark 4) and forehead (landmark 10)
-        let nose = match landmarks.get(4) { Some(p) => p, None => return GazeResult::invalid() };
-        let forehead = match landmarks.get(10) { Some(p) => p, None => return GazeResult::invalid() };
+        let nose = match landmarks.get(4) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
+        let forehead = match landmarks.get(10) {
+            Some(p) => p,
+            None => return GazeResult::invalid(),
+        };
 
         let nose_x = nose.x as f64;
-        let nose_y = forehead.y as f64;  // Use forehead Y for vertical
+        let nose_y = forehead.y as f64; // Use forehead Y for vertical
 
         // EMA smoothing on raw nose position (alpha = 0.25)
         self.ema_nose_x += (nose_x - self.ema_nose_x) * 0.25;
@@ -204,7 +259,7 @@ impl GazeTracker {
 
         // Auto-calibration: track center and expand range symmetrically
         // This keeps the neutral position near center of range
-        let cal_alpha = 0.01;  // Slow center tracking
+        let cal_alpha = 0.01; // Slow center tracking
         let center_x = (self.observed_x_min + self.observed_x_max) / 2.0;
         let center_y = (self.observed_y_min + self.observed_y_max) / 2.0;
 
@@ -222,7 +277,7 @@ impl GazeTracker {
         let new_half_span_x = if dist_from_center_x > half_span_x {
             half_span_x + (dist_from_center_x - half_span_x) * 0.1
         } else {
-            half_span_x * 0.999  // Very slow shrink
+            half_span_x * 0.999 // Very slow shrink
         };
         let new_half_span_y = if dist_from_center_y > half_span_y {
             half_span_y + (dist_from_center_y - half_span_y) * 0.1
@@ -237,8 +292,8 @@ impl GazeTracker {
         self.observed_y_max = new_center_y + new_half_span_y;
 
         // Use observed range with minimum span
-        let min_x_span = 0.08;  // Minimum X range for sensitivity
-        let min_y_span = 0.05;  // Minimum Y range
+        let min_x_span = 0.08; // Minimum X range for sensitivity
+        let min_y_span = 0.05; // Minimum Y range
         let x_span = (self.observed_x_max - self.observed_x_min).max(min_x_span);
         let y_span = (self.observed_y_max - self.observed_y_min).max(min_y_span);
         let x_center = (self.observed_x_min + self.observed_x_max) / 2.0;
@@ -312,8 +367,12 @@ pub extern "C" fn iris_gaze_init(
     screen_height: i32,
     _dominant_eye: *const c_char,
 ) -> *mut GazeTracker {
-    log(&format!("🦀 iris_gaze_init({}x{}) GazeResult size={}",
-        screen_width, screen_height, std::mem::size_of::<GazeResult>()));
+    log(&format!(
+        "🦀 iris_gaze_init({}x{}) GazeResult size={}",
+        screen_width,
+        screen_height,
+        std::mem::size_of::<GazeResult>()
+    ));
 
     let mut tracker = Box::new(GazeTracker::new(screen_width, screen_height));
 
@@ -415,7 +474,10 @@ pub extern "C" fn iris_gaze_set_calibration(
     tracker.nose_x_max = x_max;
     tracker.nose_y_min = y_min;
     tracker.nose_y_max = y_max;
-    log(&format!("🎯 Calibration set: X=[{:.4}, {:.4}], Y=[{:.4}, {:.4}]", x_min, x_max, y_min, y_max));
+    log(&format!(
+        "🎯 Calibration set: X=[{:.4}, {:.4}], Y=[{:.4}, {:.4}]",
+        x_min, x_max, y_min, y_max
+    ));
 }
 
 #[no_mangle]

@@ -12,6 +12,8 @@ pub struct GazeResult {
     pub y: f64,
     /// Event type: 0=none, 1=gaze, 2=blink/wink
     pub event_type: u8,
+    /// Blink eye: 0=none, 1=left, 2=right, 3=both
+    pub blink_eye: u8,
     /// Whether this result is valid
     pub valid: bool,
 }
@@ -22,6 +24,7 @@ impl Default for GazeResult {
             x: 0.0,
             y: 0.0,
             event_type: 0,
+            blink_eye: 0,
             valid: false,
         }
     }
@@ -34,16 +37,18 @@ impl GazeResult {
             x,
             y,
             event_type: 1,
+            blink_eye: 0,
             valid: true,
         }
     }
 
     /// Create a blink/wink event result
-    pub fn blink(x: f64, y: f64) -> Self {
+    pub fn blink(x: f64, y: f64, blink_eye: u8) -> Self {
         Self {
             x,
             y,
             event_type: 2,
+            blink_eye,
             valid: true,
         }
     }
@@ -283,9 +288,10 @@ mod tests {
 
     #[test]
     fn test_gaze_result_blink() {
-        let result = GazeResult::blink(150.0, 250.0);
+        let result = GazeResult::blink(150.0, 250.0, 2);
         assert!(result.valid);
         assert_eq!(result.event_type, 2);
+        assert_eq!(result.blink_eye, 2);
     }
 
     #[test]
