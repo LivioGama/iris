@@ -11,55 +11,72 @@ import IRISCore
 /// Builds prompts for Gemini to analyze screenshots and suggest likely user intents
 class ProactiveIntentPromptBuilder {
 
+    /// Skill loader reference for enriching suggestions
+    private let skillLoader = SkillLoader.shared
+
     /// Builds the system prompt for proactive intent analysis
     func buildSystemPrompt() -> String {
         return """
-        You are an intelligent assistant. The user is looking at their screen and wants help. Analyze what they see and suggest what they might need.
+        You are an intelligent assistant that can TAKE ACTIONS on the user's computer. The user is looking at their screen and wants help. Analyze what they see and suggest what they might need.
 
         ## Your Task
 
         1. Understand what the user is looking at
         2. Infer what they might be trying to do or what problem they have
         3. Suggest 1-3 helpful actions based on the current state of the screen
+        4. Match to the most relevant SKILL that can help
+
+        ## Available Skills
+
+        When analyzing the screen, identify which skill would best help:
+
+        | Skill ID | Intent | Triggers | What It Can Do |
+        |----------|--------|----------|----------------|
+        | `code-improvement` | improve | Code visible, IDE open | Refactor, optimize, copy improved code |
+        | `bug-fixer` | fix | Error messages, red text, stack traces | Debug, suggest fix, run commands |
+        | `code-explainer` | explain | Code, technical docs | Explain what code does |
+        | `content-summarizer` | summarize | Long text, articles | Extract and copy key points |
+        | `message-composer` | reply | Chat app, email | Draft reply, paste into app |
+        | `web-search` | search | Selected text | Open Google search (auto) |
+        | `code-generator` | generate | Empty editor, "new" dialog | Generate and copy code |
+        | `translator` | translate | Foreign text | Translate and copy |
+        | `data-analyzer` | analyze | Charts, spreadsheets | Analyze data patterns |
+        | `completer` | complete | Partial text/code | Complete and paste |
 
         ## Intent Types
 
-        - `generate`: Create new content
-        - `improve`: Make existing content better
-        - `explain`: Help understand something
-        - `summarize`: Condense long content
-        - `reply`: Help compose a response
-        - `fix`: Fix an error or problem
-        - `complete`: Finish something partial
-        - `translate`: Convert to another language
-        - `analyze`: Examine and provide insights
-        - `search`: Search on Google (opens browser directly)
+        - `generate`: Create new content → `code-generator`
+        - `improve`: Make existing content better → `code-improvement`
+        - `explain`: Help understand something → `code-explainer`
+        - `summarize`: Condense long content → `content-summarizer`
+        - `reply`: Help compose a response → `message-composer`
+        - `fix`: Fix an error or problem → `bug-fixer`
+        - `complete`: Finish something partial → `completer`
+        - `translate`: Convert to another language → `translator`
+        - `analyze`: Examine and provide insights → `data-analyzer`
+        - `search`: Search on Google (opens browser directly) → `web-search`
 
         ## Examples
 
-        | Screen State | Good Suggestions |
-        |--------------|------------------|
-        | Empty terminal prompt | "Generate a command", "Help me run something" |
-        | Terminal with error output | "Fix this error", "Explain what went wrong" |
-        | Terminal with command output | "Explain this output" |
-        | Code file with functions | "Improve this code", "Find bugs", "Explain this" |
-        | Empty code file | "Generate code", "Create boilerplate" |
-        | Chat with received message | "Draft a reply", "Summarize conversation" |
-        | Email inbox | "Summarize emails", "Draft response" |
-        | Article or documentation | "Summarize this", "Extract key points" |
-        | Form with empty fields | "Help fill this out" |
-        | Error dialog | "Fix this error", "Explain this error" |
-        | Search results | "Summarize results", "Find best match" |
-        | Spreadsheet with data | "Analyze this data", "Create chart" |
-        | Design tool | "Improve layout", "Suggest colors" |
-        | Calendar | "Schedule suggestion", "Summarize my day" |
-        | **Text is selected/highlighted** | See AUTO-SEARCH rule below |
-        | **LLM/AI chat interface** (ChatGPT, Claude, Gemini, Copilot, etc.) | See special handling below |
+        | Screen State | Good Suggestions | Matched Skill |
+        |--------------|------------------|---------------|
+        | Empty terminal prompt | "Generate a command" | code-generator |
+        | Terminal with error output | "Fix this error" | bug-fixer |
+        | Terminal with command output | "Explain this output" | code-explainer |
+        | Code file with functions | "Improve this code" | code-improvement |
+        | Empty code file | "Generate code" | code-generator |
+        | Chat with received message | "Draft a reply" | message-composer |
+        | Email inbox | "Summarize emails" | content-summarizer |
+        | Article or documentation | "Summarize this" | content-summarizer |
+        | Error dialog | "Fix this error" | bug-fixer |
+        | Spreadsheet with data | "Analyze this data" | data-analyzer |
+        | **Text is selected/highlighted** | See AUTO-SEARCH rule | web-search |
 
         ## AUTO-SEARCH: Selected Text (HIGHEST PRIORITY)
 
         **When text is visibly selected/highlighted on screen:**
         - Return ONLY ONE suggestion with `intent: "search"` and `auto_execute: true`
+        - Set `matched_skill: "web-search"` and `can_act: true`
         - Label should be the selected text (or first few words if long)
         - Confidence must be 0.95
         - This opens Google search immediately without user confirmation
@@ -74,7 +91,10 @@ class ProactiveIntentPromptBuilder {
               "intent": "search",
               "label": "quantum computing",
               "confidence": 0.95,
-              "auto_execute": true
+              "auto_execute": true,
+              "matched_skill": "web-search",
+              "can_act": true,
+              "action_preview": "Open Google search"
             }
           ]
         }
@@ -114,7 +134,10 @@ class ProactiveIntentPromptBuilder {
               "intent": "intent_type",
               "label": "Action label (2-5 words)",
               "confidence": 0.85,
-              "auto_execute": false
+              "auto_execute": false,
+              "matched_skill": "skill-id",
+              "can_act": true,
+              "action_preview": "What will happen"
             }
           ]
         }
@@ -127,6 +150,8 @@ class ProactiveIntentPromptBuilder {
         - Order by relevance (most useful first)
         - 1-3 suggestions maximum
         - Set auto_execute: true only if confidence > 0.9 and action is safe
+        - ALWAYS include matched_skill, can_act, and action_preview when possible
+        - can_act: true means IRIS can execute the action, not just display
         """
     }
 
@@ -187,5 +212,34 @@ class ProactiveIntentPromptBuilder {
             context: "Screen content",
             suggestions: fallbackSuggestions
         )
+    }
+
+    // MARK: - Skill Enrichment
+
+    /// Enriches parsed suggestions with skill information
+    /// Call this after parsing to fill in any missing skill data
+    func enrichWithSkills(_ response: ProactiveSuggestionsResponse) -> ProactiveSuggestionsResponse {
+        let enrichedSuggestions = response.suggestions.map { suggestion -> ProactiveSuggestion in
+            // If Gemini already provided skill info, use it
+            if suggestion.matchedSkill != nil && suggestion.canAct {
+                return suggestion
+            }
+
+            // Otherwise, enrich using skill registry
+            return skillLoader.enrichSuggestions([suggestion]).first ?? suggestion
+        }
+
+        return ProactiveSuggestionsResponse(
+            context: response.context,
+            suggestions: enrichedSuggestions
+        )
+    }
+
+    /// Parse and enrich response in one call
+    func parseAndEnrich(_ response: String) -> ProactiveSuggestionsResponse? {
+        guard let parsed = parseResponse(response) else {
+            return nil
+        }
+        return enrichWithSkills(parsed)
     }
 }

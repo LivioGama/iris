@@ -15,12 +15,35 @@ public struct ProactiveSuggestion: Identifiable, Codable, Equatable {
     public let confidence: Double
     public let autoExecute: Bool
 
-    public init(id: Int, intent: String, label: String, confidence: Double, autoExecute: Bool = false) {
+    // MARK: - Skill Integration Fields
+
+    /// ID of the skill that matches this suggestion (e.g., "code-improvement")
+    public var matchedSkill: String?
+
+    /// Whether IRIS can take action on this suggestion (not just display)
+    public var canAct: Bool
+
+    /// Preview of what will happen if this suggestion is executed
+    public var actionPreview: String?
+
+    public init(
+        id: Int,
+        intent: String,
+        label: String,
+        confidence: Double,
+        autoExecute: Bool = false,
+        matchedSkill: String? = nil,
+        canAct: Bool = false,
+        actionPreview: String? = nil
+    ) {
         self.id = id
         self.intent = intent
         self.label = label
         self.confidence = confidence
         self.autoExecute = autoExecute
+        self.matchedSkill = matchedSkill
+        self.canAct = canAct
+        self.actionPreview = actionPreview
     }
 
     enum CodingKeys: String, CodingKey {
@@ -29,6 +52,9 @@ public struct ProactiveSuggestion: Identifiable, Codable, Equatable {
         case label
         case confidence
         case autoExecute = "auto_execute"
+        case matchedSkill = "matched_skill"
+        case canAct = "can_act"
+        case actionPreview = "action_preview"
     }
 
     public init(from decoder: Decoder) throws {
@@ -38,6 +64,21 @@ public struct ProactiveSuggestion: Identifiable, Codable, Equatable {
         label = try container.decode(String.self, forKey: .label)
         confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
         autoExecute = try container.decodeIfPresent(Bool.self, forKey: .autoExecute) ?? false
+        matchedSkill = try container.decodeIfPresent(String.self, forKey: .matchedSkill)
+        canAct = try container.decodeIfPresent(Bool.self, forKey: .canAct) ?? false
+        actionPreview = try container.decodeIfPresent(String.self, forKey: .actionPreview)
+    }
+
+    // MARK: - Skill Helpers
+
+    /// Returns true if this suggestion should show the execute button
+    public var showsExecuteButton: Bool {
+        canAct && matchedSkill != nil
+    }
+
+    /// Returns true if this suggestion can auto-execute (high confidence + can act)
+    public var shouldAutoExecute: Bool {
+        autoExecute && canAct && confidence >= 0.9
     }
 }
 

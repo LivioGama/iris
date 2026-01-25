@@ -692,19 +692,26 @@ struct EtherealFloatingOverlay: View {
                             if geminiService.isAnalyzingScreenshot {
                                 analyzingIndicator
                             } else if !geminiService.proactiveSuggestions.isEmpty {
-                                ProactiveSuggestionsView(
-                                    suggestions: geminiService.proactiveSuggestions,
-                                    context: geminiService.detectedContext,
-                                    onSelect: { suggestion in
-                                        Task {
-                                            await geminiService.executeProactiveSuggestion(suggestion)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    // DEBUG: Show skill badges for matched skills
+                                    #if DEBUG
+                                    DebugSkillBadgeList(suggestions: geminiService.proactiveSuggestions)
+                                    #endif
+
+                                    ProactiveSuggestionsView(
+                                        suggestions: geminiService.proactiveSuggestions,
+                                        context: geminiService.detectedContext,
+                                        onSelect: { suggestion in
+                                            Task {
+                                                await geminiService.executeProactiveSuggestion(suggestion)
+                                            }
+                                        },
+                                        onCustomRequest: {
+                                            // User wants to speak custom request - suggestions will be cleared when they speak
+                                            print("🎤 Custom request requested - listening active")
                                         }
-                                    },
-                                    onCustomRequest: {
-                                        // User wants to speak custom request - suggestions will be cleared when they speak
-                                        print("🎤 Custom request requested - listening active")
-                                    }
-                                )
+                                    )
+                                }
                                 .frame(maxWidth: 500)
                                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
                             }

@@ -21,6 +21,12 @@ private let dynamicUIResponseParser = DynamicUIResponseParser()
 // MARK: - Proactive Intent Services
 private let proactiveIntentPromptBuilder = ProactiveIntentPromptBuilder()
 
+// MARK: - Skills Services
+private let skillRegistry = SkillRegistry.shared
+private let skillLoader = SkillLoader.shared
+private let actionExecutor = ActionExecutor.shared
+private let actionPlanner = ActionPlanner.shared
+
 /// High-level orchestrator for Gemini assistant interactions
 /// Responsibility: Workflow coordination ONLY - delegates to specialized services
 public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceCommandDelegate {
@@ -69,6 +75,10 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     @Published public var isAnalyzingScreenshot: Bool = false // True while analyzing screenshot for suggestions
     @Published public var detectedContext: String = "" // Context description from Gemini
     @Published public var useProactiveMode: Bool = true // Toggle proactive suggestions on/off
+
+    // MARK: - Skills Properties
+    @Published public var currentMatchedSkill: Skill? = nil // Currently matched skill for debug display
+    @Published public var isExecutingSkill: Bool = false // True while executing a skill action
 
     // MARK: - Services
     private let geminiClient: GeminiClient
@@ -664,20 +674,27 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
             print("✅ analyzeScreenshotForIntent: Got response")
 
-            // Parse the response
-            if let parsed = proactiveIntentPromptBuilder.parseResponse(responseText) {
+            // Parse and enrich the response with skill info
+            if let parsed = proactiveIntentPromptBuilder.parseAndEnrich(responseText) {
                 await MainActor.run {
                     self.proactiveSuggestions = parsed.suggestions
                     self.detectedContext = parsed.context
                     self.isAnalyzingScreenshot = false
 
-                    print("🔮 Proactive suggestions ready: \(parsed.suggestions.map { $0.label })")
+                    // Log enriched suggestions with skill info
+                    for suggestion in parsed.suggestions {
+                        if let skillId = suggestion.matchedSkill {
+                            print("🎯 Suggestion '\(suggestion.label)' matched to skill: \(skillId) (canAct: \(suggestion.canAct))")
+                        } else {
+                            print("🔮 Suggestion '\(suggestion.label)' (no skill match)")
+                        }
+                    }
 
-                    // Check for auto-execute (single high-confidence suggestion)
+                    // Check for auto-execute (single high-confidence suggestion that can act)
                     if parsed.suggestions.count == 1,
                        let suggestion = parsed.suggestions.first,
-                       suggestion.autoExecute && suggestion.confidence >= 0.9 {
-                        print("🚀 Auto-executing high-confidence suggestion: \(suggestion.label)")
+                       suggestion.shouldAutoExecute {
+                        print("🚀 Auto-executing high-confidence agentic suggestion: \(suggestion.label)")
                         Task {
                             await self.executeProactiveSuggestion(suggestion)
                         }
@@ -713,6 +730,22 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             return
         }
 
+        // Check if this suggestion has a matched skill that can act directly
+        if let skillId = suggestion.matchedSkill,
+           let skill = skillRegistry.skill(for: skillId),
+           suggestion.canAct {
+            print("🎯 Executing via skill: \(skill.name)")
+
+            // For web-search, handle directly without Gemini
+            if skillId == "web-search" {
+                await handleDirectBrowserAction(suggestion)
+                return
+            }
+
+            // For other skills, we still need Gemini to generate the response
+            // then we'll execute the action plan
+        }
+
         guard let screenshot = await MainActor.run(body: { self.capturedScreenshot }) else {
             print("❌ No screenshot available for execution")
             return
@@ -734,6 +767,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         let prompt = suggestion.executionPrompt
 
         // Send to Gemini with the full context
+        // The response will be handled by the skill execution system if applicable
         await sendToGemini(screenshot: screenshot, prompt: prompt, focusedElement: currentFocusedElement)
     }
 
@@ -750,21 +784,16 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
         }
 
         // Extract search query from the label or context
-        let searchQuery = suggestion.executionPrompt
+        let searchQuery = suggestion.label
             .replacingOccurrences(of: "Search for ", with: "")
             .replacingOccurrences(of: "Search ", with: "")
             .replacingOccurrences(of: "Google ", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // URL encode the query
-        guard let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") else {
-            print("❌ Failed to create search URL")
-            return
-        }
+        print("🔍 Executing Google search via ActionExecutor: \(searchQuery)")
 
-        print("🔍 Opening Google search: \(url)")
-        NSWorkspace.shared.open(url)
+        // Use ActionExecutor for the search
+        actionExecutor.googleSearch(searchQuery)
     }
 
     /// Starts listening for suggestion selection (voice commands like "one", "two", etc.)
