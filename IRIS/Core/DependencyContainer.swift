@@ -111,6 +111,11 @@ class DependencyContainer {
         return GeminiClient(apiKey: apiKey)
     }()
 
+    private(set) lazy var geminiAudioClient: GeminiAudioClient = {
+        let apiKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        return GeminiAudioClient(apiKey: apiKey)
+    }()
+
     private(set) lazy var conversationManager: ConversationManager = {
         ConversationManager(maxHistoryLength: 20)
     }()
@@ -126,6 +131,7 @@ class DependencyContainer {
     private(set) lazy var geminiAssistant: GeminiAssistantOrchestrator = {
         GeminiAssistantOrchestrator(
             geminiClient: geminiClient,
+            geminiAudioClient: geminiAudioClient,
             conversationManager: conversationManager,
             voiceInteractionService: voiceInteractionService,
             messageExtractionService: messageExtractionService,
@@ -212,10 +218,11 @@ class DependencyContainer {
 
     // MARK: - API Key Management
 
-    /// Saves the API key to UserDefaults and updates the Gemini client
+    /// Saves the API key to UserDefaults and updates the Gemini clients
     func saveAPIKey(_ apiKey: String) {
         UserDefaults.standard.set(apiKey, forKey: "GEMINI_API_KEY")
         geminiClient.updateAPIKey(apiKey)
+        geminiAudioClient.updateAPIKey(apiKey)
         print("🔑 API Key saved and updated")
     }
 

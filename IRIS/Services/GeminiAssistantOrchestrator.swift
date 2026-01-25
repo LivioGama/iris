@@ -82,6 +82,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
 
     // MARK: - Services
     private let geminiClient: GeminiClient
+    private let geminiAudioClient: GeminiAudioClient
     private let conversationManager: ConversationManager
     internal let voiceInteractionService: VoiceInteractionService
     private let messageExtractionService: MessageExtractionService
@@ -130,6 +131,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     // MARK: - Initialization
     public init(
         geminiClient: GeminiClient,
+        geminiAudioClient: GeminiAudioClient,
         conversationManager: ConversationManager,
         voiceInteractionService: VoiceInteractionService,
         messageExtractionService: MessageExtractionService,
@@ -138,6 +140,7 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
     ) {
         print("🚀🚀🚀 GeminiAssistantOrchestrator init() called - NEW CODE with Gemini 3.0 Flash classification!")
         self.geminiClient = geminiClient
+        self.geminiAudioClient = geminiAudioClient
         self.conversationManager = conversationManager
         self.voiceInteractionService = voiceInteractionService
         self.messageExtractionService = messageExtractionService
@@ -1623,6 +1626,22 @@ public class GeminiAssistantOrchestrator: NSObject, ObservableObject, ICOIVoiceC
             }
 
             print("✅ Gemini response received")
+        }
+        
+        // Generate and play audio response for Germany users only
+        if LocaleDetector.isGermany() {
+            print("🇩🇪 Germany locale detected - generating audio response")
+            Task {
+                do {
+                    let audioData = try await geminiAudioClient.generateAudioResponse(text: responseText)
+                    try geminiAudioClient.playAudio(audioData)
+                    print("🔊 Audio response played successfully")
+                } catch {
+                    print("⚠️ Failed to generate/play audio response: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            print("🌍 Non-Germany locale - skipping audio response")
         }
 
         // Auto-close timer removed - user explicitly dismissed via scroll up or voice command
